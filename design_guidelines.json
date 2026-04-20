@@ -1,0 +1,113 @@
+{
+  "theme": "LIGHT",
+  "archetype": "Organic & Earthy",
+  "colors": {
+    "background": "#F9F9F7",
+    "surface": "#FFFFFF",
+    "primary": "#2A5C43",
+    "primary_hover": "#204633",
+    "secondary": "#8A9E88",
+    "accent": "#C25E46",
+    "text_primary": "#1A1A1A",
+    "text_secondary": "#5C615E",
+    "border": "#E4E6E3",
+    "glass": "rgba(255, 255, 255, 0.75)"
+  },
+  "typography": {
+    "heading_font": "Manrope",
+    "body_font": "Work Sans",
+    "h1": "text-4xl sm:text-5xl font-black tracking-tight",
+    "h2": "text-2xl font-extrabold tracking-tight",
+    "h3": "text-xl font-bold tracking-tight",
+    "body": "text-base font-normal leading-relaxed text-[#5C615E]",
+    "small_label": "text-xs font-semibold uppercase tracking-[0.2em] text-[#8A9E88]"
+  },
+  "spacing": {
+    "container_padding": "p-6 sm:p-8",
+    "section_gap": "gap-8 sm:gap-12",
+    "element_gap": "gap-4"
+  },
+  "components": {
+    "card": "bg-white rounded-3xl shadow-[0_8px_32px_rgba(42,92,67,0.06)] border border-[#E4E6E3] p-6 overflow-hidden",
+    "button_primary": "bg-[#2A5C43] text-white hover:bg-[#204633] rounded-full py-4 px-8 font-bold transition-all duration-200 active:scale-95 text-center flex items-center justify-center gap-2",
+    "button_secondary": "bg-[#F9F9F7] text-[#2A5C43] hover:bg-[#E4E6E3] rounded-full py-4 px-8 font-bold transition-all duration-200 active:scale-95 text-center flex items-center justify-center gap-2",
+    "input_field": "w-full bg-white border border-[#E4E6E3] rounded-2xl px-5 py-4 text-base focus:ring-2 focus:ring-[#8A9E88] focus:border-transparent outline-none transition-all",
+    "pill_tag": "inline-flex items-center px-4 py-2 rounded-full border border-[#E4E6E3] bg-white text-[#1A1A1A] font-medium text-sm data-[state=selected]:bg-[#2A5C43] data-[state=selected]:text-white data-[state=selected]:border-[#2A5C43] transition-colors",
+    "chat_bubble_user": "bg-[#2A5C43] text-white rounded-2xl rounded-tr-sm p-4 max-w-[85%] self-end",
+    "chat_bubble_ai": "bg-white border border-[#E4E6E3] text-[#1A1A1A] rounded-2xl rounded-tl-sm p-4 max-w-[85%] self-start shadow-sm",
+    "bottom_nav": "fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-[#E4E6E3] pb-safe pt-2 px-6 flex justify-between items-center z-50 shadow-[0_-4px_24px_rgba(0,0,0,0.04)]",
+    "glass_header": "sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#E4E6E3]/50 pb-4 pt-safe px-6 flex justify-between items-center"
+  },
+  "screens": {
+    "home_dashboard": {
+      "layout": "Mobile-first vertical stack. Top glass header. Bento grid for stats. Vertical list for feature cards.",
+      "sections": [
+        "Header: User greeting, Date, Mini avatar.",
+        "Hero Stats: Grid cols-2. Span 1 tall (Daily Goal Ring), Span 1 split horizontal (Water, Calories).",
+        "Feature Menu: 3 large horizontal cards. 1. Symptom Checker (Organic green icon), 2. Fitness Trainer (Terracotta icon), 3. AI Chat (Sage icon)."
+      ]
+    },
+    "symptom_checker": {
+      "layout": "List and Search centric.",
+      "sections": [
+        "Search Bar: Large, pill-shaped, sticky top.",
+        "Body: Flex wrap container for popular symptom pill tags.",
+        "Action: Fixed bottom button 'Analyze Symptoms' over a gradient fade background to prevent cutting off text."
+      ]
+    },
+    "fitness_trainer": {
+      "layout": "Immersive workout view. Darker overlay if camera is on.",
+      "sections": [
+        "Top: Exercise title and 'End Workout' ghost button.",
+        "Center: Massive rep counter (text-[120px] font-black tracking-tighter text-[#2A5C43]).",
+        "Bottom: Horizontal swiper (Cards) for exercise form tips."
+      ]
+    },
+    "healthcare_chatbot": {
+      "layout": "Standard chat interface but elevated.",
+      "sections": [
+        "Chat Area: Generous spacing between bubbles. Date stamps in small_label typography.",
+        "Input Area: Floating pill-shaped input docked above the keyboard/bottom tab, with a circular send/mic button."
+      ]
+    }
+  },
+  "motion": {
+    "hover": "Subtle transform -translate-y-[2px] and shadow elevation for cards.",
+    "tap": "scale-95 for all buttons and interactive cards (using framer-motion or CSS active state).",
+    "page_transition": "Slide in from right, fade out."
+  },
+  "icons": {
+    "library": "lucide-react",
+    "stroke_width": 2,
+    "size_standard": 24,
+    "size_large": 32
+  },
+  "image_urls": {
+    "fitness_hero": {
+      "url": "https://images.unsplash.com/photo-1764426445448-95103b0024a6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwzfHxwZXJzb24lMjBkb2luZyUyMHB1c2h1cHMlMjBneW18ZW58MHx8fHwxNzc2NjYxOTU3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Man doing push-ups in gym",
+      "category": "fitness_trainer_background"
+    },
+    "health_consult": {
+      "url": "https://images.unsplash.com/photo-1758691462749-a95ce1bd7f96?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwxfHxkb2N0b3IlMjB0YWJsZXQlMjBjb25zdWx0YXRpb258ZW58MHx8fHwxNzc2NjYxOTU3fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Doctor consulting patient via video call on laptop",
+      "category": "chatbot_avatar_or_header"
+    },
+    "healthy_lifestyle": {
+      "url": "https://images.pexels.com/photos/7991909/pexels-photo-7991909.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Smiling woman in a pink top holding a bowl of fresh salad with cherry tomatoes and greens indoors.",
+      "category": "home_dashboard_hero"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Build the UI targeting a mobile web layout (PWA style) since Expo web/PWA is requested. Ensure all containers have a max-width (e.g., max-w-md mx-auto) for desktop viewing to simulate a mobile screen.",
+    "Use standard Tailwind CSS and Shadcn UI as described in the Tech Stack.",
+    "Do NOT use 'Inter' for headings. Use 'Manrope' for headings and 'Work Sans' for body text.",
+    "Ensure generous padding in cards (`p-6`). Use flat white surfaces with soft, ambient shadows, avoiding dark hard borders unless for specific form inputs.",
+    "In the AI Fitness Tracker screen, use massive typography (`text-[120px]`) for the rep counter to make it glanceable.",
+    "All interactive elements MUST have a `data-testid` attribute (e.g., `data-testid=\"symptom-submit-button\"`).",
+    "Strictly follow the color palette: Deep Forest Green (#2A5C43) as primary, Off-white (#F9F9F7) background.",
+    "Do NOT use placeholder images. Use the exact URLs provided in `image_urls`.",
+    "Include a Bottom Navigation bar pinned to the bottom of the screen with a glassmorphism effect (`bg-white/80 backdrop-blur-xl`)."
+  ]
+}
