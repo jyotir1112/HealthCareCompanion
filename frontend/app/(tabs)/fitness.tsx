@@ -1,15 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useRef, useState } from "react";
+import { Accelerometer } from "expo-sensors";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../constants/theme";
+import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
+import { useAuth } from "../../contexts/AuthContext";
 
 type Exercise = {
   id: string;
@@ -19,18 +25,75 @@ type Exercise = {
   muscle_groups: string[];
   difficulty: string;
   calories_per_10_reps: number;
+  tracking_mode: "reps" | "time";
+  motion_axis: "x" | "y" | "xyz" | "none";
   form_tips: string[];
 };
 
 function formatTime(s: number) {
-  const m = Math.floor(s / 60)
-    .toString()
-    .padStart(2, "0");
+  const m = Math.floor(s / 60).toString().padStart(2, "0");
   const sec = (s % 60).toString().padStart(2, "0");
   return `${m}:${sec}`;
 }
 
+// Motion-peak based rep detection. Tracks acceleration magnitude and detects
+// a down-up cycle above a threshold as one rep. Works well for squats, push-ups,
+// jumping jacks — imperfect but approximates real pose-detection rep counting.
+function useAccelRepCounter(options: {
+  enabled: boolean;
+  axis: Exercise["motion_axis"];
+  threshold: number;
+  onRep: () => void;
+}) {
+  const { enabled, axis, threshold, onRep } = options;
+  const stateRef = useRef<"idle" | "down" | "up">("idle");
+  const lastRepAtRef = useRef<number>(0);
+  const magRef = useRef<number>(1);
+
+  useEffect(() => {
+    if (!enabled) return;
+    Accelerometer.setUpdateInterval(100);
+    const sub = Accelerometer.addListener(({ x, y, z }) => {
+      // Magnitude depending on axis of interest
+      let val: number;
+      if (axis === "y") val = y;
+      else if (axis === "x") val = x;
+      else val = Math.sqrt(x * x + y * y + z * z) - 1; // subtract gravity baseline for xyz
+      magRef.current = val;
+      const now = Date.now();
+      if (now - lastRepAtRef.current < 400) return; // debounce
+
+      // For axis-based (y/x), use sign transitions with threshold
+      if (axis === "y" || axis === "x") {
+        if (stateRef.current !== "down" && val < -threshold) {
+          stateRef.current = "down";
+        } else if (stateRef.current === "down" && val > threshold) {
+          stateRef.current = "up";
+          lastRepAtRef.current = now;
+          onRep();
+        } else if (Math.abs(val) < 0.1 && stateRef.current === "up") {
+          stateRef.current = "idle";
+        }
+      } else {
+        // xyz magnitude above threshold once per cycle
+        if (stateRef.current !== "down" && Math.abs(val) > threshold) {
+          stateRef.current = "down";
+        } else if (stateRef.current === "down" && Math.abs(val) < 0.1) {
+          stateRef.current = "up";
+          lastRepAtRef.current = now;
+          onRep();
+          stateRef.current = "idle";
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [enabled, axis, threshold, onRep]);
+
+  return magRef;
+}
+
 export default function FitnessScreen() {
+  const { token } = useAuth();
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selected, setSelected] = useState<Exercise | null>(null);
   const [reps, setReps] = useState(0);
@@ -39,6 +102,12 @@ export default function FitnessScreen() {
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Camera + auto-detect states
+  const [cameraOn, setCameraOn] = useState(false);
+  const [autoDetect, setAutoDetect] = useState(false);
+  const [camPermission, requestCamPermission] = useCameraPermissions();
+  const [accelAvailable, setAccelAvailable] = useState(true);
 
   useEffect(() => {
     const load = async () => {
@@ -51,13 +120,14 @@ export default function FitnessScreen() {
       }
     };
     load();
+    Accelerometer.isAvailableAsync()
+      .then(setAccelAvailable)
+      .catch(() => setAccelAvailable(false));
   }, []);
 
   useEffect(() => {
     if (running) {
-      intervalRef.current = setInterval(() => {
-        setSeconds((s) => s + 1);
-      }, 1000);
+      intervalRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
     } else if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -66,6 +136,19 @@ export default function FitnessScreen() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [running]);
+
+  const onAutoRep = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setReps((r) => r + 1);
+    if (!running) setRunning(true);
+  }, [running]);
+
+  useAccelRepCounter({
+    enabled: autoDetect && !!selected && selected.tracking_mode === "reps",
+    axis: (selected?.motion_axis as any) || "y",
+    threshold: 0.35,
+    onRep: onAutoRep,
+  });
 
   const incrementRep = () => {
     if (!running) setRunning(true);
@@ -81,8 +164,12 @@ export default function FitnessScreen() {
   };
 
   const finishWorkout = async () => {
-    if (!selected || reps === 0) {
+    if (!selected) return;
+    const hasProgress = selected.tracking_mode === "time" ? seconds > 0 : reps > 0;
+    if (!hasProgress) {
       setSelected(null);
+      setCameraOn(false);
+      setAutoDetect(false);
       resetWorkout();
       return;
     }
@@ -90,16 +177,21 @@ export default function FitnessScreen() {
     try {
       await fetch(`${API_URL}/workouts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           exercise: selected.name,
-          reps,
+          reps: selected.tracking_mode === "time" ? 1 : reps,
           duration_seconds: seconds,
         }),
       });
       setSavedMsg("Workout saved!");
       setTimeout(() => {
         setSelected(null);
+        setCameraOn(false);
+        setAutoDetect(false);
         resetWorkout();
       }, 1200);
     } catch {
@@ -107,6 +199,14 @@ export default function FitnessScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const enableCamera = async () => {
+    if (!camPermission?.granted) {
+      const res = await requestCamPermission();
+      if (!res.granted) return;
+    }
+    setCameraOn(true);
   };
 
   // -------- EXERCISE LIST --------
@@ -120,7 +220,7 @@ export default function FitnessScreen() {
           <Text style={styles.smallLabel}>TRAIN SMARTER</Text>
           <Text style={styles.title}>AI Fitness Trainer</Text>
           <Text style={styles.subtitle}>
-            Tap the counter to log reps. We'll track your time and calories.
+            Camera + motion detection auto-counts reps. Manual tap always works.
           </Text>
 
           <View style={{ gap: SPACING.md, marginTop: SPACING.lg }}>
@@ -139,9 +239,7 @@ export default function FitnessScreen() {
                   <View style={styles.exerciseTopRow}>
                     <Text style={styles.exerciseName}>{ex.name}</Text>
                     <View style={styles.difficultyBadge}>
-                      <Text style={styles.difficultyText}>
-                        {ex.difficulty}
-                      </Text>
+                      <Text style={styles.difficultyText}>{ex.difficulty}</Text>
                     </View>
                   </View>
                   <Text style={styles.exerciseDesc} numberOfLines={2}>
@@ -153,6 +251,20 @@ export default function FitnessScreen() {
                         <Text style={styles.muscleText}>{m}</Text>
                       </View>
                     ))}
+                    {ex.tracking_mode === "time" && (
+                      <View
+                        style={[
+                          styles.muscleTag,
+                          { backgroundColor: "#FBE8E2", borderColor: "#FBE8E2" },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.muscleText, { color: COLORS.accent }]}
+                        >
+                          Timed
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -165,8 +277,10 @@ export default function FitnessScreen() {
 
   // -------- WORKOUT VIEW --------
   const caloriesBurned = Math.round(
-    (reps / 10) * selected.calories_per_10_reps
+    ((selected.tracking_mode === "time" ? seconds / 10 : reps / 10) *
+      selected.calories_per_10_reps)
   );
+  const isTimed = selected.tracking_mode === "time";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -179,6 +293,8 @@ export default function FitnessScreen() {
             onPress={() => {
               resetWorkout();
               setSelected(null);
+              setCameraOn(false);
+              setAutoDetect(false);
             }}
             testID="back-to-exercises-btn"
           >
@@ -194,16 +310,63 @@ export default function FitnessScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Camera preview */}
+        {cameraOn && camPermission?.granted ? (
+          <View style={styles.cameraBox} testID="camera-preview">
+            <CameraView style={StyleSheet.absoluteFill} facing="front" />
+            <View style={styles.cameraOverlay}>
+              <View style={styles.overlayTopRow}>
+                <View style={styles.recDot} />
+                <Text style={styles.cameraOverlayText}>
+                  {autoDetect ? "AUTO-DETECTING" : "CAMERA"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.cameraClose}
+                onPress={() => {
+                  setCameraOn(false);
+                  setAutoDetect(false);
+                }}
+                testID="camera-close-btn"
+              >
+                <Ionicons name="close" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.cameraPlaceholder}
+            onPress={enableCamera}
+            testID="enable-camera-btn"
+          >
+            <Ionicons name="videocam" size={32} color={COLORS.primary} />
+            <Text style={styles.cameraPlaceholderTitle}>
+              Enable Camera Coach
+            </Text>
+            <Text style={styles.cameraPlaceholderSub}>
+              See yourself while working out. Turn on Auto-Detect below to count
+              reps hands-free via motion sensors.
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Counter */}
         <View style={styles.counterCard}>
-          <Text style={styles.counterLabel}>REPS</Text>
+          <Text style={styles.counterLabel}>
+            {isTimed ? "TIME" : "REPS"}
+          </Text>
           <Text style={styles.counterValue} testID="rep-counter">
-            {reps}
+            {isTimed ? formatTime(seconds) : reps}
           </Text>
           <View style={styles.counterStatsRow}>
-            <View style={styles.counterStat}>
-              <Ionicons name="time" size={16} color={COLORS.secondary} />
-              <Text style={styles.counterStatText}>{formatTime(seconds)}</Text>
-            </View>
+            {!isTimed && (
+              <View style={styles.counterStat}>
+                <Ionicons name="time" size={16} color={COLORS.secondary} />
+                <Text style={styles.counterStatText}>
+                  {formatTime(seconds)}
+                </Text>
+              </View>
+            )}
             <View style={styles.counterStat}>
               <Ionicons name="flame" size={16} color={COLORS.accent} />
               <Text style={styles.counterStatText}>{caloriesBurned} cal</Text>
@@ -211,15 +374,42 @@ export default function FitnessScreen() {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.bigTapBtn}
-          activeOpacity={0.85}
-          onPress={incrementRep}
-          testID="tap-rep-btn"
-        >
-          <Ionicons name="add" size={44} color="#fff" />
-          <Text style={styles.bigTapText}>TAP TO COUNT</Text>
-        </TouchableOpacity>
+        {/* Auto-detect toggle */}
+        {!isTimed && (
+          <View style={styles.autoRow} testID="auto-detect-row">
+            <View style={{ flex: 1 }}>
+              <Text style={styles.autoTitle}>Auto-Detect Reps</Text>
+              <Text style={styles.autoSub}>
+                {accelAvailable
+                  ? Platform.OS === "web"
+                    ? "Uses device motion. Best on a phone — tap phone to body or hold it."
+                    : "Hold or wear your phone. Detects motion cycles."
+                  : "Motion sensor unavailable on this device."}
+              </Text>
+            </View>
+            <Switch
+              value={autoDetect}
+              onValueChange={setAutoDetect}
+              disabled={!accelAvailable}
+              trackColor={{ false: COLORS.border, true: COLORS.primary }}
+              thumbColor="#fff"
+              testID="auto-detect-switch"
+            />
+          </View>
+        )}
+
+        {/* Manual tap */}
+        {!isTimed && (
+          <TouchableOpacity
+            style={styles.bigTapBtn}
+            activeOpacity={0.85}
+            onPress={incrementRep}
+            testID="tap-rep-btn"
+          >
+            <Ionicons name="add" size={44} color="#fff" />
+            <Text style={styles.bigTapText}>TAP TO COUNT</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.controlsRow}>
           <TouchableOpacity
@@ -233,10 +423,7 @@ export default function FitnessScreen() {
               color={running ? "#fff" : COLORS.primary}
             />
             <Text
-              style={[
-                styles.ctrlBtnText,
-                running && styles.ctrlBtnTextActive,
-              ]}
+              style={[styles.ctrlBtnText, running && styles.ctrlBtnTextActive]}
             >
               {running ? "Pause" : "Start"}
             </Text>
@@ -248,10 +435,14 @@ export default function FitnessScreen() {
             disabled={saving}
             testID="finish-workout-btn"
           >
-            <Ionicons name="checkmark" size={18} color="#fff" />
-            <Text style={styles.finishBtnText}>
-              {saving ? "Saving..." : "Finish"}
-            </Text>
+            {saving ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="checkmark" size={18} color="#fff" />
+                <Text style={styles.finishBtnText}>Finish</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -279,10 +470,7 @@ export default function FitnessScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
-  container: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xxl,
-  },
+  container: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
   smallLabel: {
     fontSize: 11,
     letterSpacing: 1.5,
@@ -383,6 +571,74 @@ const styles = StyleSheet.create({
     fontWeight: FONT.extrabold,
     color: COLORS.text_primary,
   },
+
+  // Camera
+  cameraPlaceholder: {
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.sm,
+    backgroundColor: "#EEF1ED",
+  },
+  cameraPlaceholderTitle: {
+    fontSize: 16,
+    fontWeight: FONT.extrabold,
+    color: COLORS.primary,
+  },
+  cameraPlaceholderSub: {
+    fontSize: 13,
+    color: COLORS.text_secondary,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  cameraBox: {
+    height: 240,
+    borderRadius: RADIUS.lg,
+    overflow: "hidden",
+    backgroundColor: "#000",
+    position: "relative",
+  },
+  cameraOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    padding: SPACING.md,
+    justifyContent: "space-between",
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  overlayTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+  },
+  recDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.accent,
+  },
+  cameraOverlayText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: FONT.bold,
+    letterSpacing: 1,
+  },
+  cameraClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   counterCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
@@ -398,27 +654,46 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
   },
   counterValue: {
-    fontSize: 120,
+    fontSize: 96,
     fontWeight: FONT.black,
     color: COLORS.primary,
-    letterSpacing: -4,
-    lineHeight: 130,
+    letterSpacing: -3,
+    lineHeight: 106,
   },
   counterStatsRow: {
     flexDirection: "row",
     gap: SPACING.lg,
     marginTop: SPACING.md,
   },
-  counterStat: {
-    flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-  },
+  counterStat: { flexDirection: "row", gap: 6, alignItems: "center" },
   counterStatText: {
     fontSize: 14,
     fontWeight: FONT.bold,
     color: COLORS.text_primary,
   },
+
+  autoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SPACING.md,
+    backgroundColor: COLORS.surface,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  autoTitle: {
+    fontSize: 15,
+    fontWeight: FONT.bold,
+    color: COLORS.text_primary,
+  },
+  autoSub: {
+    fontSize: 12,
+    color: COLORS.text_secondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+
   bigTapBtn: {
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.lg,
@@ -433,10 +708,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontWeight: FONT.extrabold,
   },
-  controlsRow: {
-    flexDirection: "row",
-    gap: SPACING.md,
-  },
+  controlsRow: { flexDirection: "row", gap: SPACING.md },
   ctrlBtn: {
     flex: 1,
     flexDirection: "row",
@@ -449,9 +721,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.primary,
   },
-  ctrlBtnActive: {
-    backgroundColor: COLORS.primary,
-  },
+  ctrlBtnActive: { backgroundColor: COLORS.primary },
   ctrlBtnText: {
     color: COLORS.primary,
     fontWeight: FONT.bold,

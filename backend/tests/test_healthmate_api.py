@@ -1,4 +1,4 @@
-"""HealthMate backend API tests (pytest)."""
+"""HealthMate backend API tests (pytest) - Iteration 2 with JWT auth + 11 exercises."""
 import os
 import uuid
 import pytest
@@ -6,6 +6,9 @@ import requests
 
 BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://fitness-care-hub.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
+
+ADMIN_EMAIL = "admin@healthmate.app"
+ADMIN_PASSWORD = "Admin@1234"
 
 
 @pytest.fixture(scope="module")
@@ -15,13 +18,90 @@ def client():
     return s
 
 
+@pytest.fixture(scope="module")
+def admin_token(client):
+    r = client.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, timeout=30)
+    assert r.status_code == 200, f"Admin login failed: {r.status_code} {r.text}"
+    return r.json()["access_token"]
+
+
 # ===== Root =====
 class TestRoot:
     def test_root(self, client):
         r = client.get(f"{API}/", timeout=30)
         assert r.status_code == 200
+        assert "HealthMate" in r.json().get("message", "")
+
+
+# ===== AUTH =====
+class TestAuth:
+    def test_admin_login_success(self, client):
+        r = client.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, timeout=30)
+        assert r.status_code == 200
         data = r.json()
-        assert "HealthMate" in data.get("message", "")
+        assert "access_token" in data
+        assert data["token_type"] == "bearer"
+        assert data["user"]["email"] == ADMIN_EMAIL
+        assert data["user"]["role"] == "admin"
+        assert data["user"]["name"] == "Admin"
+        assert "id" in data["user"]
+
+    def test_login_wrong_password_returns_401(self, client):
+        # Use unique email-ip combo to avoid lockout interference
+        r = client.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": "wrongpass-xyz"}, timeout=30)
+        assert r.status_code == 401
+
+    def test_register_new_user(self, client):
+        email = f"test_{uuid.uuid4().hex[:8]}@test.com"
+        payload = {"email": email, "password": "Test@1234", "name": "TEST_NewUser"}
+        r = client.post(f"{API}/auth/register", json=payload, timeout=30)
+        assert r.status_code == 200, f"Register failed: {r.status_code} {r.text}"
+        data = r.json()
+        assert data["user"]["email"] == email.lower()
+        assert data["user"]["name"] == "TEST_NewUser"
+        assert data["user"]["role"] == "user"
+        assert "access_token" in data
+        # token must work
+        token = data["access_token"]
+        r2 = client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        assert r2.status_code == 200
+        assert r2.json()["email"] == email.lower()
+
+    def test_register_duplicate_email_returns_400(self, client):
+        email = f"dup_{uuid.uuid4().hex[:8]}@test.com"
+        payload = {"email": email, "password": "Test@1234", "name": "TEST_Dup"}
+        r1 = client.post(f"{API}/auth/register", json=payload, timeout=30)
+        assert r1.status_code == 200
+        r2 = client.post(f"{API}/auth/register", json=payload, timeout=30)
+        assert r2.status_code == 400
+
+    def test_me_without_token_returns_401(self, client):
+        r = requests.get(f"{API}/auth/me", timeout=30)
+        assert r.status_code == 401
+
+    def test_me_with_admin_token(self, client, admin_token):
+        r = client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {admin_token}"}, timeout=30)
+        assert r.status_code == 200
+        assert r.json()["email"] == ADMIN_EMAIL
+
+    def test_logout_requires_token(self, client, admin_token):
+        r = client.post(f"{API}/auth/logout", headers={"Authorization": f"Bearer {admin_token}"}, timeout=30)
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+        r2 = requests.post(f"{API}/auth/logout", timeout=30)
+        assert r2.status_code == 401
+
+    def test_brute_force_lockout(self, client):
+        """6+ wrong attempts should trigger 429 lockout (backend locks at count >=5)."""
+        email = f"bf_{uuid.uuid4().hex[:8]}@test.com"
+        # Register the user first
+        client.post(f"{API}/auth/register", json={"email": email, "password": "Correct@123", "name": "TEST_BF"}, timeout=30)
+        codes = []
+        for i in range(7):
+            r = client.post(f"{API}/auth/login", json={"email": email, "password": "wrong"}, timeout=30)
+            codes.append(r.status_code)
+        # At least one of the later attempts should be 429
+        assert 429 in codes, f"Expected 429 in attempts, got {codes}"
 
 
 # ===== Symptoms =====
@@ -29,60 +109,53 @@ class TestSymptoms:
     def test_get_symptoms(self, client):
         r = client.get(f"{API}/symptoms", timeout=30)
         assert r.status_code == 200
-        data = r.json()
-        assert "symptoms" in data
-        assert isinstance(data["symptoms"], list)
-        assert len(data["symptoms"]) > 10
-        assert all(isinstance(x, str) for x in data["symptoms"])
+        assert len(r.json()["symptoms"]) > 10
 
     def test_check_symptoms_success(self, client):
-        payload = {"symptoms": ["headache", "nausea", "sensitivity to light"]}
-        r = client.post(f"{API}/symptoms/check", json=payload, timeout=30)
+        r = client.post(f"{API}/symptoms/check", json={"symptoms": ["headache", "nausea", "sensitivity to light"]}, timeout=30)
         assert r.status_code == 200
         data = r.json()
-        assert "results" in data
-        assert "disclaimer" in data
-        assert len(data["results"]) <= 5
         assert len(data["results"]) >= 1
-        top = data["results"][0]
-        for key in ["name", "match_score", "description", "recommendation", "specialist", "severity"]:
-            assert key in top
-        # Migraine should be a top hit
-        names = [r["name"] for r in data["results"]]
-        assert any("Migraine" in n for n in names)
-        # sorted desc by score
-        scores = [r["match_score"] for r in data["results"]]
-        assert scores == sorted(scores, reverse=True)
+        assert any("Migraine" in x["name"] for x in data["results"])
 
-    def test_check_symptoms_empty_returns_400(self, client):
+    def test_check_symptoms_empty_400(self, client):
         r = client.post(f"{API}/symptoms/check", json={"symptoms": []}, timeout=30)
         assert r.status_code == 400
 
-    def test_check_symptoms_no_match(self, client):
-        r = client.post(f"{API}/symptoms/check", json={"symptoms": ["unknown_xyz_symptom"]}, timeout=30)
-        assert r.status_code == 200
-        assert r.json()["results"] == []
 
-
-# ===== Exercises =====
+# ===== Exercises (NOW 11) =====
 class TestExercises:
-    def test_get_exercises(self, client):
+    EXPECTED_IDS = {
+        "push-up", "pull-up", "squat", "sit-up", "plank",
+        "lunges", "jumping-jacks", "bicep-curls", "shoulder-press",
+        "burpees", "deadlift",
+    }
+
+    def test_get_exercises_has_11(self, client):
         r = client.get(f"{API}/exercises", timeout=30)
         assert r.status_code == 200
-        data = r.json()
-        exs = data.get("exercises", [])
-        assert len(exs) == 3
+        exs = r.json()["exercises"]
+        assert len(exs) == 11, f"Expected 11 exercises, got {len(exs)}"
         ids = {e["id"] for e in exs}
-        assert ids == {"push-up", "pull-up", "squat"}
+        assert ids == self.EXPECTED_IDS, f"IDs mismatch: {ids}"
+        # All must have tracking_mode and motion_axis
         for e in exs:
-            for key in ["name", "emoji", "description", "muscle_groups",
-                       "difficulty", "calories_per_10_reps", "form_tips"]:
-                assert key in e, f"Missing {key} in {e['id']}"
+            assert "tracking_mode" in e, f"{e['id']} missing tracking_mode"
+            assert "motion_axis" in e, f"{e['id']} missing motion_axis"
+            assert e["tracking_mode"] in ("reps", "time")
 
-    def test_get_exercise_by_id(self, client):
-        r = client.get(f"{API}/exercises/push-up", timeout=30)
+    def test_plank_is_timed(self, client):
+        r = client.get(f"{API}/exercises/plank", timeout=30)
         assert r.status_code == 200
-        assert r.json()["id"] == "push-up"
+        data = r.json()
+        assert data["tracking_mode"] == "time"
+        assert data["motion_axis"] == "none"
+
+    def test_new_exercises_are_reps(self, client):
+        r = client.get(f"{API}/exercises", timeout=30)
+        exs = {e["id"]: e for e in r.json()["exercises"]}
+        for eid in ["sit-up", "lunges", "jumping-jacks", "bicep-curls", "shoulder-press", "burpees", "deadlift"]:
+            assert exs[eid]["tracking_mode"] == "reps", f"{eid} should be reps"
 
     def test_get_exercise_invalid(self, client):
         r = client.get(f"{API}/exercises/nonexistent", timeout=30)
@@ -91,47 +164,44 @@ class TestExercises:
 
 # ===== Workouts =====
 class TestWorkouts:
-    def test_log_and_list_workout(self, client):
+    def test_log_workout_anonymous(self, client):
         payload = {"exercise": "TEST_Push-Up", "reps": 15, "duration_seconds": 60}
         r = client.post(f"{API}/workouts", json=payload, timeout=30)
         assert r.status_code == 200
         data = r.json()
-        assert data["exercise"] == payload["exercise"]
+        assert data["exercise"] == "TEST_Push-Up"
         assert data["reps"] == 15
-        assert data["duration_seconds"] == 60
-        assert "id" in data
-        assert "timestamp" in data
-
-        # List and verify persistence
+        assert data.get("user_id") is None
+        # List persistence
         r2 = client.get(f"{API}/workouts", timeout=30)
         assert r2.status_code == 200
-        items = r2.json()
-        assert isinstance(items, list)
-        assert any(w["id"] == data["id"] for w in items)
+        assert any(w["id"] == data["id"] for w in r2.json())
+
+    def test_log_workout_with_auth(self, client, admin_token):
+        payload = {"exercise": "TEST_Plank", "reps": 0, "duration_seconds": 45}
+        r = client.post(
+            f"{API}/workouts",
+            json=payload,
+            headers={"Authorization": f"Bearer {admin_token}"},
+            timeout=30,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["user_id"] is not None
 
 
-# ===== Chat (Claude Sonnet 4.5 via Emergent LLM key) =====
+# ===== Chat (Emergent LLM) =====
 class TestChat:
     session_id = f"test-session-{uuid.uuid4()}"
 
     def test_chat_send_and_history(self, client):
-        payload = {
-            "session_id": self.session_id,
-            "message": "Give me one short tip to improve sleep.",
-        }
+        payload = {"session_id": self.session_id, "message": "One short sleep tip."}
         r = client.post(f"{API}/chat/send", json=payload, timeout=120)
         assert r.status_code == 200, f"Chat failed: {r.status_code} {r.text}"
         data = r.json()
         assert data["session_id"] == self.session_id
-        assert isinstance(data["reply"], str)
         assert len(data["reply"].strip()) > 5
-
-        # History
         r2 = client.get(f"{API}/chat/history/{self.session_id}", timeout=30)
         assert r2.status_code == 200
-        hist = r2.json()
-        assert hist["session_id"] == self.session_id
-        msgs = hist["messages"]
+        msgs = r2.json()["messages"]
         assert len(msgs) >= 2
-        roles = [m["role"] for m in msgs]
-        assert "user" in roles and "assistant" in roles

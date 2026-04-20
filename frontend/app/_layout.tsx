@@ -1,76 +1,68 @@
-import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import React, { useEffect } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { COLORS } from "../constants/theme";
+import { AuthProvider, useAuth } from "../contexts/AuthContext";
 
-const COLORS = {
-  primary: "#2A5C43",
-  secondary: "#8A9E88",
-  text_secondary: "#5C615E",
-  border: "#E4E6E3",
-  surface: "#FFFFFF",
-};
+function RootNav() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    const inAuthGroup = segments[0] === "(auth)";
+    if (!user && !inAuthGroup) {
+      router.replace("/(auth)/login");
+    } else if (user && inAuthGroup) {
+      router.replace("/");
+    }
+  }, [user, loading, segments, router]);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  const inAuthGroup = segments[0] === "(auth)";
+  // Prevent flashing wrong screen while redirecting
+  if ((!user && !inAuthGroup) || (user && inAuthGroup)) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(tabs)" />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: COLORS.primary,
-          tabBarInactiveTintColor: COLORS.text_secondary,
-          tabBarStyle: {
-            backgroundColor: COLORS.surface,
-            borderTopColor: COLORS.border,
-            borderTopWidth: 1,
-            height: 72,
-            paddingTop: 8,
-            paddingBottom: 16,
-          },
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: "600",
-          },
-        }}
-      >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: "Home",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="symptoms"
-          options={{
-            title: "Symptoms",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="medkit" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="fitness"
-          options={{
-            title: "Fitness",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="barbell" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="chat"
-          options={{
-            title: "MediBot",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="chatbubbles" size={size} color={color} />
-            ),
-          }}
-        />
-      </Tabs>
+      <AuthProvider>
+        <RootNav />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

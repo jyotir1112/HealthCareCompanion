@@ -1,0 +1,43 @@
+{
+  "summary": "HealthMate Iteration 2 (JWT auth + 11 exercises + camera/motion) fully tested. Backend: 18/19 pytest tests pass (root, auth/login success+401+duplicate 400+register+me+logout, symptoms 3, exercises 11 count + Plank timed + new reps exercises, workouts anonymous+authed with Bearer, chat/LLM). Frontend: login screen, wrong-creds error toast, admin login → home with 'Hello, Admin 👋' + logout-btn, fitness tab lists all 11 exercises in order with Timed badge on Plank, Plank opens timed-workout view (NO tap button, NO auto-detect switch, time counter 00:00, Start, Finish, Form Tips), Push-Up opens rep-workout view (Enable Camera Coach placeholder, REPS=0 counter, Auto-Detect Reps switch, Start, Finish, Form Tips). Only failure: brute-force lockout never triggers over public ingress.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/auth/login",
+        "issue": "Brute-force lockout relies on request.client.host which is the pod IP behind the Kubernetes ingress. Backend logs show requests alternating between 10.64.129.166 and 10.64.130.9 (two ingress pods), so identifier `{ip}:{email}` is split across two buckets and count never reaches 5. Observed: 7 wrong attempts returned 401×7 instead of 401×5 + 429×2. Fix: read X-Forwarded-For first IP in client_ip(request), e.g. `request.headers.get('x-forwarded-for', '').split(',')[0].strip() or request.client.host`. This is safe because the ingress always sets XFF. Impact: rate-limiting/brute-force protection is effectively disabled in production preview (security concern, HIGH priority even though classed as 'minor' since all other endpoints are fine)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global", "issues": ["Non-blocking RN-web warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — emitted by a library, not project code."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_healthmate_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "[HIGH] Fix brute-force lockout: update `client_ip(request)` in /app/backend/server.py to prefer the first IP from the X-Forwarded-For header so the `{ip}:{email}` identifier is stable behind the Kubernetes ingress. Retest with the existing TestAuth.test_brute_force_lockout pytest after the fix.",
+    "[LOW] Review request claims lockout triggers at '6+ wrong attempts' but code locks at count>=5 (i.e. the 6th attempt). Align docs or code — current behaviour (lock on the 6th request) is fine and matches the industry default of 5 failed attempts."
+  ],
+  "critical_code_review_comments": [
+    "server.py client_ip() does not honor X-Forwarded-For — breaks any IP-based logic behind an ingress/LB.",
+    "server.py /api/workouts accepts Bearer token but silently ignores invalid tokens (just logs user_id=None). Fine for optional-auth, but consider rejecting a malformed token with 401 to surface client bugs.",
+    "POST /api/auth/login increments the counter even when the user does not exist, which is correct; however consider CAPTCHA/backoff hints in the 429 body for better UX.",
+    "RootLayout in app/_layout.tsx shows a full-screen ActivityIndicator during redirect — OK, but on web the static SSR of / may briefly flash Home before hydration (acknowledged by main agent; not blocking)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_healthmate_api.py (rewritten with JWT auth, 11-exercise, brute-force, register, duplicate-email, me/logout tests — 19 tests total)"
+  ],
+  "success_rate": {"backend": "94.7% (18/19)", "frontend": "100% of covered flows"},
+  "seed_data_creation": "Admin is auto-seeded by backend on startup (admin@healthmate.app / Admin@1234). Pytest creates a few TEST_-prefixed users (test_<rand>@test.com, dup_<rand>@test.com, bf_<rand>@test.com) and TEST_Push-Up / TEST_Plank workout docs. Harmless.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend URL: https://fitness-care-hub.preview.emergentagent.com (from /app/frontend/.env → EXPO_PUBLIC_BACKEND_URL). Admin creds: admin@healthmate.app / Admin@1234 (see /app/memory/test_credentials.md). Pytest file: /app/backend/tests/test_healthmate_api.py. The only failing test is TestAuth.test_brute_force_lockout — do NOT mark as a test-harness issue; it's a real bug in client_ip() that only shows up behind the Kubernetes ingress (two pod IPs alternate per request). Frontend flow: the web SSR of / briefly flashes Home before redirect — expected per main agent note. Register screen cannot be reached while logged in (auth guard redirects to /) — to test register, clear AsyncStorage healthmate_token first or call /logout. Push-Up workout view fully verified (Camera Coach placeholder, REPS counter, Auto-Detect switch, Finish). Plank view is correctly time-based (no tap button, no auto-detect switch, 00:00 timer).",
+  "rca_of_issue": "Brute-force lockout: backend function `client_ip(request) → request.client.host` returns the immediate TCP peer which is the ingress pod (10.64.129.166 or 10.64.130.9). Because two ingress pods round-robin traffic, the identifier `{ip}:{email}` alternates, so count per identifier caps at ~3-4 instead of reaching ≥5. Reproduction: run `pytest /app/backend/tests/test_healthmate_api.py::TestAuth::test_brute_force_lockout`. Mitigation: prepend X-Forwarded-For parsing in client_ip()."
+}

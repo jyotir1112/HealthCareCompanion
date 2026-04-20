@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../constants/theme";
+import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
 
 type Msg = {
   id: string;

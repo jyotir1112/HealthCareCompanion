@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "HealthMate",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,14 +9,25 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Track your workout form with the camera.",
+        "NSMicrophoneUsageDescription": "Optional audio during workouts.",
+        "NSMotionUsageDescription": "Detect motion to auto-count exercise reps."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.HIGH_SAMPLING_RATE_SENSORS",
+        "android.permission.BODY_SENSORS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -25,6 +36,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow HealthMate to access your camera to follow your workout form.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
       [
         "expo-splash-screen",
         {

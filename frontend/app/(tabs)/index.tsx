@@ -2,7 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  Alert,
   Image,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +12,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { COLORS, FONT, RADIUS, SPACING } from "../constants/theme";
+import { COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
+import { useAuth } from "../../contexts/AuthContext";
 
 const HERO_IMAGE =
   "https://images.pexels.com/photos/7991909/pexels-photo-7991909.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";
@@ -53,11 +56,25 @@ const FEATURES: {
 
 export default function Home() {
   const router = useRouter();
+  const { user, logout } = useAuth();
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "short",
     day: "numeric",
   });
+
+  const confirmLogout = () => {
+    if (Platform.OS === "web") {
+      if (window.confirm("Sign out of HealthMate?")) logout();
+      return;
+    }
+    Alert.alert("Sign out", "Sign out of HealthMate?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign out", style: "destructive", onPress: () => logout() },
+    ]);
+  };
+
+  const firstName = (user?.name ?? "").split(" ")[0] || "there";
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -68,14 +85,20 @@ export default function Home() {
       >
         {/* Header */}
         <View style={styles.headerRow}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.smallLabel}>{today}</Text>
-            <Text style={styles.greeting}>Hello, 👋</Text>
+            <Text style={styles.greeting} testID="home-greeting">
+              Hello, {firstName} 👋
+            </Text>
             <Text style={styles.name}>How are you feeling today?</Text>
           </View>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={22} color={COLORS.primary} />
-          </View>
+          <TouchableOpacity
+            style={styles.avatar}
+            onPress={confirmLogout}
+            testID="logout-btn"
+          >
+            <Ionicons name="log-out-outline" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
 
         {/* Hero Card */}
