@@ -87,6 +87,15 @@ async def get_current_user(request: Request) -> dict:
 
 
 def client_ip(request: Request) -> str:
+    # Behind K8s ingress / proxy — use X-Forwarded-For first IP
+    xff = request.headers.get("x-forwarded-for", "") or request.headers.get("X-Forwarded-For", "")
+    if xff:
+        first = xff.split(",")[0].strip()
+        if first:
+            return first
+    real_ip = request.headers.get("x-real-ip", "")
+    if real_ip:
+        return real_ip.strip()
     return request.client.host if request.client else "unknown"
 
 
