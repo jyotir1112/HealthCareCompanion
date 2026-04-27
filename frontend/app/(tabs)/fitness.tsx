@@ -399,8 +399,13 @@ export default function FitnessScreen() {
         ) : (
           <View style={styles.coachRow}>
             <TouchableOpacity
-              style={styles.coachBtn}
+              style={[styles.coachBtn, Platform.OS === "web" && { opacity: 0.55 }]}
               onPress={async () => {
+                if (Platform.OS === "web") {
+                  // Web preview doesn't support react-native-webview pose detection
+                  // Use Camera Only fallback. Show a hint via state.
+                  return;
+                }
                 if (!camPermission?.granted) {
                   const r = await requestCamPermission();
                   if (!r.granted) return;
@@ -415,7 +420,9 @@ export default function FitnessScreen() {
             >
               <Ionicons name="scan" size={24} color="#fff" />
               <Text style={styles.coachBtnText}>AI Pose Vision</Text>
-              <Text style={styles.coachBtnSub}>Counts reps via camera</Text>
+              <Text style={styles.coachBtnSub}>
+                {Platform.OS === "web" ? "Open on phone" : "Counts reps via camera"}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.coachBtnAlt}
