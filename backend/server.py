@@ -186,17 +186,34 @@ class WorkoutLogCreate(BaseModel):
 # ==================== DATA: SYMPTOMS + EXERCISES ====================
 SYMPTOM_DISEASE_DB = [
     {"name": "Common Cold", "symptoms": ["runny nose", "sneezing", "sore throat", "cough", "mild fever", "congestion", "headache"], "description": "A viral infection of the nose and throat (upper respiratory tract).", "recommendation": "Rest, stay hydrated, take over-the-counter cold medicine. Usually resolves in 7-10 days.", "specialist": "General Physician", "severity": "mild"},
-    {"name": "Influenza (Flu)", "symptoms": ["high fever", "chills", "body aches", "fatigue", "cough", "headache", "sore throat"], "description": "A contagious respiratory illness caused by influenza viruses.", "recommendation": "Rest, plenty of fluids, antiviral medications if prescribed within 48 hours. See a doctor if symptoms worsen.", "specialist": "General Physician", "severity": "moderate"},
+    {"name": "Influenza (Flu)", "symptoms": ["high fever", "chills", "body aches", "fatigue", "cough", "headache", "sore throat", "muscle pain"], "description": "A contagious respiratory illness caused by influenza viruses.", "recommendation": "Rest, plenty of fluids, antiviral medications if prescribed within 48 hours. See a doctor if symptoms worsen.", "specialist": "General Physician", "severity": "moderate"},
     {"name": "Migraine", "symptoms": ["headache", "nausea", "vomiting", "sensitivity to light", "sensitivity to sound", "blurred vision"], "description": "A neurological condition causing severe throbbing pain, usually on one side of the head.", "recommendation": "Rest in a quiet, dark room. Take prescribed migraine medication. Track triggers.", "specialist": "Neurologist", "severity": "moderate"},
-    {"name": "Gastroenteritis", "symptoms": ["nausea", "vomiting", "diarrhea", "abdominal pain", "mild fever", "dehydration"], "description": "Inflammation of the stomach and intestines, often from a viral or bacterial infection.", "recommendation": "Drink oral rehydration solutions, eat bland foods, rest. See a doctor if symptoms persist >48 hrs.", "specialist": "Gastroenterologist", "severity": "moderate"},
-    {"name": "Seasonal Allergies", "symptoms": ["sneezing", "runny nose", "itchy eyes", "congestion", "watery eyes", "itchy throat"], "description": "An allergic response to airborne substances like pollen or dust.", "recommendation": "Antihistamines, nasal sprays, and avoiding allergens. Consult an allergist for testing.", "specialist": "Allergist / Immunologist", "severity": "mild"},
+    {"name": "Tension Headache", "symptoms": ["headache", "neck stiffness", "fatigue", "difficulty concentrating", "muscle pain"], "description": "A common type of headache often caused by stress, poor posture, or eye strain.", "recommendation": "Rest, hydrate, gentle neck stretches, OTC pain relievers. Address stress and posture.", "specialist": "General Physician", "severity": "mild"},
+    {"name": "Gastroenteritis", "symptoms": ["nausea", "vomiting", "diarrhea", "abdominal pain", "mild fever", "dehydration", "loss of appetite"], "description": "Inflammation of the stomach and intestines, often from a viral or bacterial infection.", "recommendation": "Drink oral rehydration solutions, eat bland foods, rest. See a doctor if symptoms persist >48 hrs.", "specialist": "Gastroenterologist", "severity": "moderate"},
+    {"name": "Acid Reflux (GERD)", "symptoms": ["heartburn", "chest pain", "sour taste", "difficulty swallowing", "cough", "nausea"], "description": "Stomach acid frequently flows back into the esophagus, irritating its lining.", "recommendation": "Avoid spicy/fatty foods, eat smaller meals, don't lie down right after eating, OTC antacids.", "specialist": "Gastroenterologist", "severity": "mild"},
+    {"name": "Seasonal Allergies", "symptoms": ["sneezing", "runny nose", "itchy eyes", "congestion", "watery eyes", "itchy throat", "rash"], "description": "An allergic response to airborne substances like pollen or dust.", "recommendation": "Antihistamines, nasal sprays, and avoiding allergens. Consult an allergist for testing.", "specialist": "Allergist / Immunologist", "severity": "mild"},
     {"name": "Asthma", "symptoms": ["shortness of breath", "wheezing", "chest tightness", "cough", "difficulty breathing"], "description": "A chronic condition where the airways narrow and swell, making breathing difficult.", "recommendation": "Use prescribed inhalers, avoid triggers. Seek emergency care for severe attacks.", "specialist": "Pulmonologist", "severity": "moderate"},
-    {"name": "Hypertension (High Blood Pressure)", "symptoms": ["headache", "dizziness", "blurred vision", "chest pain", "shortness of breath", "fatigue"], "description": "A common condition where the long-term force of blood against artery walls is too high.", "recommendation": "Regular BP monitoring, reduce salt, exercise, take prescribed medication. See cardiologist.", "specialist": "Cardiologist", "severity": "moderate"},
-    {"name": "Diabetes (Type 2)", "symptoms": ["frequent urination", "increased thirst", "fatigue", "blurred vision", "weight loss", "slow healing"], "description": "A chronic condition affecting how your body processes blood sugar (glucose).", "recommendation": "Monitor blood sugar, healthy diet, regular exercise, prescribed medication. See endocrinologist.", "specialist": "Endocrinologist", "severity": "moderate"},
-    {"name": "Anxiety Disorder", "symptoms": ["restlessness", "fatigue", "difficulty concentrating", "rapid heartbeat", "sweating", "trembling", "insomnia"], "description": "A mental health condition characterized by excessive worry and fear.", "recommendation": "Therapy (CBT), stress management, medication if prescribed. Seek a mental health professional.", "specialist": "Psychiatrist / Psychologist", "severity": "moderate"},
-    {"name": "Pneumonia", "symptoms": ["high fever", "cough", "chest pain", "shortness of breath", "fatigue", "chills", "difficulty breathing"], "description": "Infection that inflames air sacs in one or both lungs, which may fill with fluid.", "recommendation": "See a doctor immediately. Antibiotics or antivirals, rest, hydration. Hospitalization may be needed.", "specialist": "Pulmonologist", "severity": "severe"},
-    {"name": "Urinary Tract Infection (UTI)", "symptoms": ["frequent urination", "burning sensation", "cloudy urine", "pelvic pain", "abdominal pain"], "description": "An infection in any part of the urinary system (kidneys, bladder, urethra).", "recommendation": "Antibiotics, drink plenty of water. See a doctor for diagnosis and prescription.", "specialist": "Urologist / General Physician", "severity": "mild"},
-    {"name": "Anemia", "symptoms": ["fatigue", "weakness", "pale skin", "shortness of breath", "dizziness", "cold hands", "headache"], "description": "A condition where you lack enough healthy red blood cells to carry adequate oxygen.", "recommendation": "Iron-rich diet, supplements, treat underlying cause. Blood tests needed for diagnosis.", "specialist": "Hematologist / General Physician", "severity": "mild"},
+    {"name": "Bronchitis", "symptoms": ["cough", "mucus production", "chest discomfort", "fatigue", "shortness of breath", "mild fever"], "description": "Inflammation of the lining of the bronchial tubes that carry air to and from the lungs.", "recommendation": "Rest, fluids, humidifier, OTC cough medicine. See a doctor if cough lasts >3 weeks.", "specialist": "Pulmonologist", "severity": "moderate"},
+    {"name": "Hypertension (High Blood Pressure)", "symptoms": ["headache", "dizziness", "blurred vision", "chest pain", "shortness of breath", "fatigue", "rapid heartbeat"], "description": "A common condition where the long-term force of blood against artery walls is too high.", "recommendation": "Regular BP monitoring, reduce salt, exercise, take prescribed medication. See cardiologist.", "specialist": "Cardiologist", "severity": "moderate"},
+    {"name": "Diabetes (Type 2)", "symptoms": ["frequent urination", "increased thirst", "fatigue", "blurred vision", "weight loss", "slow healing", "tingling hands"], "description": "A chronic condition affecting how your body processes blood sugar (glucose).", "recommendation": "Monitor blood sugar, healthy diet, regular exercise, prescribed medication. See endocrinologist.", "specialist": "Endocrinologist", "severity": "moderate"},
+    {"name": "Hypothyroidism", "symptoms": ["fatigue", "weight gain", "cold sensitivity", "dry skin", "hair loss", "constipation", "depression"], "description": "An underactive thyroid gland that doesn't produce enough thyroid hormone.", "recommendation": "Blood test (TSH). Treatment is daily thyroid hormone replacement medication.", "specialist": "Endocrinologist", "severity": "moderate"},
+    {"name": "Hyperthyroidism", "symptoms": ["weight loss", "rapid heartbeat", "sweating", "anxiety", "trembling", "insomnia", "heat sensitivity"], "description": "An overactive thyroid gland that produces too much thyroid hormone.", "recommendation": "Blood test, possibly antithyroid drugs, radioactive iodine, or surgery.", "specialist": "Endocrinologist", "severity": "moderate"},
+    {"name": "Anxiety Disorder", "symptoms": ["restlessness", "fatigue", "difficulty concentrating", "rapid heartbeat", "sweating", "trembling", "insomnia", "anxiety"], "description": "A mental health condition characterized by excessive worry and fear.", "recommendation": "Therapy (CBT), stress management, medication if prescribed. Seek a mental health professional.", "specialist": "Psychiatrist / Psychologist", "severity": "moderate"},
+    {"name": "Depression", "symptoms": ["depression", "fatigue", "loss of appetite", "insomnia", "difficulty concentrating", "weight loss", "weight gain"], "description": "A mood disorder causing persistent feelings of sadness and loss of interest.", "recommendation": "Therapy, lifestyle changes, antidepressants if prescribed. Talk to a mental health professional.", "specialist": "Psychiatrist / Psychologist", "severity": "moderate"},
+    {"name": "Pneumonia", "symptoms": ["high fever", "cough", "chest pain", "shortness of breath", "fatigue", "chills", "difficulty breathing", "mucus production"], "description": "Infection that inflames air sacs in one or both lungs, which may fill with fluid.", "recommendation": "See a doctor immediately. Antibiotics or antivirals, rest, hydration. Hospitalization may be needed.", "specialist": "Pulmonologist", "severity": "severe"},
+    {"name": "COVID-19", "symptoms": ["high fever", "cough", "loss of taste", "loss of smell", "fatigue", "body aches", "shortness of breath", "headache", "sore throat"], "description": "A respiratory illness caused by the SARS-CoV-2 virus.", "recommendation": "Isolate, rest, hydrate, monitor oxygen. Seek emergency care if breathing becomes difficult.", "specialist": "General Physician / Pulmonologist", "severity": "severe"},
+    {"name": "Urinary Tract Infection (UTI)", "symptoms": ["frequent urination", "burning sensation", "cloudy urine", "pelvic pain", "abdominal pain", "lower back pain"], "description": "An infection in any part of the urinary system (kidneys, bladder, urethra).", "recommendation": "Antibiotics, drink plenty of water. See a doctor for diagnosis and prescription.", "specialist": "Urologist / General Physician", "severity": "mild"},
+    {"name": "Kidney Stones", "symptoms": ["lower back pain", "abdominal pain", "nausea", "vomiting", "burning sensation", "cloudy urine", "frequent urination"], "description": "Hard deposits of minerals and salts that form inside the kidneys.", "recommendation": "Drink lots of water, pain medication, sometimes medical procedures to break or remove stones.", "specialist": "Urologist", "severity": "moderate"},
+    {"name": "Anemia", "symptoms": ["fatigue", "weakness", "pale skin", "shortness of breath", "dizziness", "cold hands", "headache", "rapid heartbeat"], "description": "A condition where you lack enough healthy red blood cells to carry adequate oxygen.", "recommendation": "Iron-rich diet, supplements, treat underlying cause. Blood tests needed for diagnosis.", "specialist": "Hematologist / General Physician", "severity": "mild"},
+    {"name": "Sinusitis", "symptoms": ["congestion", "facial pain", "headache", "runny nose", "cough", "fatigue", "loss of smell"], "description": "Inflammation of the sinuses, usually due to viral, bacterial, or allergic causes.", "recommendation": "Saline rinses, decongestants, warm compresses. See a doctor if symptoms persist >10 days.", "specialist": "ENT Specialist", "severity": "mild"},
+    {"name": "Conjunctivitis (Pink Eye)", "symptoms": ["itchy eyes", "watery eyes", "redness", "discharge", "light sensitivity"], "description": "Inflammation of the membrane covering the white of the eye, often contagious.", "recommendation": "Cold compresses, artificial tears, avoid touching eyes. See a doctor for antibiotic drops if bacterial.", "specialist": "Ophthalmologist", "severity": "mild"},
+    {"name": "Eczema (Atopic Dermatitis)", "symptoms": ["rash", "dry skin", "itching", "redness", "skin inflammation"], "description": "A chronic skin condition causing itchy, inflamed patches of skin.", "recommendation": "Moisturize regularly, avoid triggers, prescribed steroid creams. Consult a dermatologist.", "specialist": "Dermatologist", "severity": "mild"},
+    {"name": "Iron Deficiency", "symptoms": ["fatigue", "pale skin", "weakness", "shortness of breath", "dizziness", "cold hands", "brittle nails"], "description": "Low iron levels in the blood, often a precursor to or form of anemia.", "recommendation": "Iron-rich foods, supplements (under medical supervision), investigate cause.", "specialist": "Hematologist / General Physician", "severity": "mild"},
+    {"name": "Heart Disease", "symptoms": ["chest pain", "shortness of breath", "fatigue", "rapid heartbeat", "dizziness", "swelling in legs", "cold sweats"], "description": "A range of conditions affecting the heart, including coronary artery disease.", "recommendation": "Seek immediate care for chest pain. Heart-healthy diet, exercise, medication, regular cardiology checkups.", "specialist": "Cardiologist", "severity": "severe"},
+    {"name": "Stroke (Warning Signs)", "symptoms": ["sudden weakness", "facial drooping", "slurred speech", "blurred vision", "severe headache", "dizziness", "confusion"], "description": "When blood supply to part of the brain is interrupted. THIS IS A MEDICAL EMERGENCY.", "recommendation": "CALL EMERGENCY SERVICES IMMEDIATELY. Time is critical for stroke treatment (FAST: Face, Arms, Speech, Time).", "specialist": "Emergency / Neurologist", "severity": "severe"},
+    {"name": "Arthritis", "symptoms": ["joint pain", "stiffness", "swelling", "reduced range of motion", "fatigue", "muscle pain"], "description": "Inflammation of one or more joints, causing pain and stiffness.", "recommendation": "Physical therapy, anti-inflammatory medications, weight management, gentle exercise.", "specialist": "Rheumatologist", "severity": "moderate"},
+    {"name": "Insomnia", "symptoms": ["insomnia", "fatigue", "difficulty concentrating", "depression", "anxiety", "headache"], "description": "Persistent difficulty falling asleep or staying asleep.", "recommendation": "Sleep hygiene, reduce screen time before bed, regular schedule. CBT-I therapy is highly effective.", "specialist": "Sleep Specialist / General Physician", "severity": "mild"},
+    {"name": "Dehydration", "symptoms": ["dehydration", "fatigue", "dizziness", "headache", "dry skin", "rapid heartbeat", "loss of appetite"], "description": "Insufficient body fluids to perform normal functions.", "recommendation": "Drink water and electrolyte solutions. Severe dehydration may need IV fluids.", "specialist": "General Physician", "severity": "mild"},
 ]
 ALL_SYMPTOMS = sorted(list({s for d in SYMPTOM_DISEASE_DB for s in d["symptoms"]}))
 
@@ -466,6 +483,52 @@ async def my_workouts_today(user: dict = Depends(get_current_user)):
     }
 
 
+@api_router.get("/workouts/me")
+async def my_workouts(limit: int = 50, user: dict = Depends(get_current_user)):
+    """All workouts for the authenticated user, most recent first."""
+    docs = await db.workouts.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("timestamp", -1).to_list(limit)
+    return {"workouts": docs}
+
+
+@api_router.get("/symptom-checks/me")
+async def my_symptom_checks(limit: int = 50, user: dict = Depends(get_current_user)):
+    """All symptom checks for the authenticated user, most recent first."""
+    docs = await db.symptom_checks.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("timestamp", -1).to_list(limit)
+    return {"checks": docs}
+
+
+@api_router.get("/chat/sessions/me")
+async def my_chat_sessions(user: dict = Depends(get_current_user)):
+    """List unique chat sessions for the authenticated user with last message preview."""
+    pipeline = [
+        {"$match": {"user_id": user["id"]}},
+        {"$sort": {"timestamp": -1}},
+        {"$group": {
+            "_id": "$session_id",
+            "last_message": {"$first": "$content"},
+            "last_role": {"$first": "$role"},
+            "last_at": {"$first": "$timestamp"},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"last_at": -1}},
+        {"$limit": 50},
+    ]
+    sessions = []
+    async for s in db.chat_messages.aggregate(pipeline):
+        sessions.append({
+            "session_id": s["_id"],
+            "last_message": s.get("last_message", ""),
+            "last_role": s.get("last_role", ""),
+            "last_at": s.get("last_at", ""),
+            "message_count": s.get("count", 0),
+        })
+    return {"sessions": sessions}
+
+
 # -------- CHAT --------
 HEALTH_SYSTEM_PROMPT = (
     "You are 'MediBot', a friendly, empathetic, and knowledgeable healthcare assistant. "
@@ -480,12 +543,22 @@ HEALTH_SYSTEM_PROMPT = (
 
 
 @api_router.post("/chat/send", response_model=ChatResponse)
-async def chat_send(request: ChatRequest):
+async def chat_send(request: ChatRequest, http_request: Request):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="LLM key not configured.")
+    # Optional auth — attach user_id if authenticated
+    user_id = None
+    auth_header = http_request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth_header[7:].strip(), JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = payload.get("sub")
+        except Exception:
+            user_id = None
     user_msg = {
         "id": str(uuid.uuid4()),
         "session_id": request.session_id,
+        "user_id": user_id,
         "role": "user",
         "content": request.message,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -504,6 +577,7 @@ async def chat_send(request: ChatRequest):
     ai_msg = {
         "id": str(uuid.uuid4()),
         "session_id": request.session_id,
+        "user_id": user_id,
         "role": "assistant",
         "content": reply_text,
         "timestamp": datetime.now(timezone.utc).isoformat(),

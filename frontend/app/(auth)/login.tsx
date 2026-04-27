@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
-import { useAuth } from "../../contexts/AuthContext";
+import { getRememberedEmail, useAuth } from "../../contexts/AuthContext";
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -23,6 +23,16 @@ export default function LoginScreen() {
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailRemembered, setEmailRemembered] = useState(false);
+
+  useEffect(() => {
+    getRememberedEmail().then((saved) => {
+      if (saved) {
+        setEmail(saved);
+        setEmailRemembered(true);
+      }
+    });
+  }, []);
 
   const onSubmit = async () => {
     setError(null);
@@ -69,11 +79,25 @@ export default function LoginScreen() {
               placeholder="Email address"
               placeholderTextColor={COLORS.text_secondary}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(v) => {
+                setEmail(v);
+                setEmailRemembered(false);
+              }}
               autoCapitalize="none"
               keyboardType="email-address"
               style={styles.input}
             />
+            {emailRemembered && (
+              <View
+                testID="remembered-tag"
+                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+              >
+                <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
+                <Text style={{ fontSize: 11, color: COLORS.primary, fontWeight: "700" }}>
+                  remembered
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.inputWrap}>

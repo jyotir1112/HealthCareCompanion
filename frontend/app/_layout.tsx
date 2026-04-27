@@ -43,6 +43,7 @@ function RootNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="history" options={{ presentation: "card" }} />
     </Stack>
   );
 }

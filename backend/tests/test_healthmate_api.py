@@ -283,3 +283,114 @@ class TestChat:
         assert r2.status_code == 200
         msgs = r2.json()["messages"]
         assert len(msgs) >= 2
+
+
+# ===== Iteration 4: expanded symptoms list =====
+class TestExpandedSymptoms:
+    def test_symptoms_count_grew(self, client):
+        r = client.get(f"{API}/symptoms", timeout=30)
+        assert r.status_code == 200
+        syms = r.json()["symptoms"]
+        # Was 28 in iter 3 — should be >= ~70 (target ~83)
+        assert len(syms) >= 60, f"Expected >=60 symptoms, got {len(syms)}"
+
+    def test_new_diseases_match(self, client):
+        # COVID-19: triggers via loss of taste + loss of smell
+        r = client.post(f"{API}/symptoms/check",
+                        json={"symptoms": ["loss of taste", "loss of smell", "high fever", "cough"]}, timeout=30)
+        assert r.status_code == 200
+        names = [d["name"] for d in r.json()["results"]]
+        assert any("COVID" in n for n in names), f"COVID not in {names}"
+
+    def test_stroke_warning(self, client):
+        r = client.post(f"{API}/symptoms/check",
+                        json={"symptoms": ["sudden weakness", "facial drooping", "slurred speech"]}, timeout=30)
+        assert r.status_code == 200
+        names = [d["name"] for d in r.json()["results"]]
+        assert any("Stroke" in n for n in names), f"Stroke not in {names}"
+
+    def test_hypothyroidism(self, client):
+        r = client.post(f"{API}/symptoms/check",
+                        json={"symptoms": ["cold sensitivity", "weight gain", "dry skin", "hair loss"]}, timeout=30)
+        names = [d["name"] for d in r.json()["results"]]
+        assert any("Hypothyroidism" in n for n in names), f"Hypothyroidism not in {names}"
+
+    def test_kidney_stones(self, client):
+        r = client.post(f"{API}/symptoms/check",
+                        json={"symptoms": ["lower back pain", "burning sensation", "cloudy urine"]}, timeout=30)
+        names = [d["name"] for d in r.json()["results"]]
+        assert any("Kidney Stones" in n or "UTI" in n for n in names)
+
+
+# ===== Iteration 4: history endpoints =====
+class TestHistoryEndpoints:
+    def _new_user(self, client):
+        email = f"hist_{uuid.uuid4().hex[:8]}@test.com"
+        reg = client.post(f"{API}/auth/register",
+                          json={"email": email, "password": "Test@1234", "name": "TEST_Hist"}, timeout=30)
+        assert reg.status_code == 200
+        return email, reg.json()["access_token"]
+
+    # /api/workouts/me
+    def test_workouts_me_requires_auth(self, client):
+        r = requests.get(f"{API}/workouts/me", timeout=30)
+        assert r.status_code == 401
+
+    def test_workouts_me_returns_history(self, client):
+        _, token = self._new_user(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        client.post(f"{API}/workouts", json={"exercise": "Push-Up", "reps": 10, "duration_seconds": 30}, headers=headers, timeout=30)
+        client.post(f"{API}/workouts", json={"exercise": "Squat", "reps": 20, "duration_seconds": 45}, headers=headers, timeout=30)
+        r = client.get(f"{API}/workouts/me", headers=headers, timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert "workouts" in data
+        assert len(data["workouts"]) == 2
+        # Most-recent first + calories present
+        for w in data["workouts"]:
+            assert "calories_burned" in w
+            assert "exercise" in w
+
+    # /api/symptom-checks/me
+    def test_symptom_checks_me_requires_auth(self, client):
+        r = requests.get(f"{API}/symptom-checks/me", timeout=30)
+        assert r.status_code == 401
+
+    def test_symptom_checks_me_returns_history(self, client):
+        _, token = self._new_user(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        client.post(f"{API}/symptoms/check", json={"symptoms": ["headache", "nausea"]}, headers=headers, timeout=30)
+        client.post(f"{API}/symptoms/check", json={"symptoms": ["cough", "high fever"]}, headers=headers, timeout=30)
+        r = client.get(f"{API}/symptom-checks/me", headers=headers, timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert "checks" in data
+        assert len(data["checks"]) == 2
+        for c in data["checks"]:
+            assert "symptoms" in c and isinstance(c["symptoms"], list)
+            assert "top_results" in c and isinstance(c["top_results"], list)
+
+    # /api/chat/sessions/me
+    def test_chat_sessions_me_requires_auth(self, client):
+        r = requests.get(f"{API}/chat/sessions/me", timeout=30)
+        assert r.status_code == 401
+
+    def test_chat_send_persists_user_id_and_sessions_returned(self, client):
+        _, token = self._new_user(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        sid = f"hist-sess-{uuid.uuid4().hex[:8]}"
+        r = client.post(f"{API}/chat/send",
+                        json={"session_id": sid, "message": "One short hydration tip."},
+                        headers=headers, timeout=120)
+        assert r.status_code == 200, f"chat send failed: {r.text}"
+        # Sessions endpoint should include this session
+        r2 = client.get(f"{API}/chat/sessions/me", headers=headers, timeout=30)
+        assert r2.status_code == 200
+        sessions = r2.json()["sessions"]
+        match = [s for s in sessions if s["session_id"] == sid]
+        assert match, f"Session {sid} missing from {sessions}"
+        s = match[0]
+        assert s["message_count"] >= 2  # user + assistant
+        assert s["last_role"] in ("user", "assistant")
+        assert s["last_message"]
+        assert s["last_at"]

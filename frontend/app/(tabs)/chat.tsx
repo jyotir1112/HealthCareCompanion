@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Speech from "expo-speech";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
+import { useAuth } from "../../contexts/AuthContext";
 
 type Msg = {
   id: string;
@@ -32,6 +34,7 @@ function uid() {
 }
 
 export default function ChatScreen() {
+  const { token } = useAuth();
   const [sessionId] = useState(() => uid());
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([
@@ -39,11 +42,86 @@ export default function ChatScreen() {
       id: "welcome",
       role: "assistant",
       content:
-        "Hi, I'm MediBot 👋 — your friendly AI health assistant. Ask me anything about wellness, symptoms, fitness, or healthy habits. Remember: I provide general info only, not medical diagnosis.",
+        "Hi, I'm MediBot 👋 — your friendly AI health assistant. Ask me anything about wellness, symptoms, fitness, or healthy habits. Tap the 🎤 to talk, and 🔊 to hear me speak. Remember: I provide general info only, not medical diagnosis.",
     },
   ]);
   const [loading, setLoading] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [listening, setListening] = useState(false);
   const listRef = useRef<FlatList<Msg>>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Speak assistant text via expo-speech (works native + web)
+  const speak = (text: string) => {
+    try {
+      Speech.stop();
+      Speech.speak(text, { rate: 1.0, pitch: 1.0 });
+    } catch {}
+  };
+
+  // Web Speech API for STT (works on Chrome/Safari + Expo web)
+  const startListening = () => {
+    if (Platform.OS !== "web") {
+      // On native, recommend typing — true STT requires Whisper backend (future)
+      return;
+    }
+    const SR =
+      (typeof window !== "undefined" &&
+        ((window as any).SpeechRecognition ||
+          (window as any).webkitSpeechRecognition)) ||
+      null;
+    if (!SR) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: uid(),
+          role: "assistant",
+          content:
+            "Your browser doesn't support voice input. You can still type or open the app on iOS Safari / Android Chrome.",
+        },
+      ]);
+      return;
+    }
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.onresult = (e: any) => {
+      let transcript = "";
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        transcript += e.results[i][0].transcript;
+      }
+      setInput(transcript);
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      // Auto-send if we got a transcript
+      setInput((cur) => {
+        const t = cur.trim();
+        if (t) {
+          // Slight delay so React commits state
+          setTimeout(() => send(t), 100);
+        }
+        return cur;
+      });
+    };
+    recognitionRef.current = rec;
+    setListening(true);
+    setInput("");
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+    }
+  };
+
+  const stopListening = () => {
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
+    setListening(false);
+  };
 
   const send = async (text?: string) => {
     const content = (text ?? input).trim();
@@ -56,7 +134,10 @@ export default function ChatScreen() {
     try {
       const res = await fetch(`${API_URL}/chat/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ session_id: sessionId, message: content }),
       });
       const data = await res.json();
@@ -65,6 +146,7 @@ export default function ChatScreen() {
         ...m,
         { id: uid(), role: "assistant", content: data.reply },
       ]);
+      if (voiceMode) speak(data.reply);
     } catch (e: any) {
       setMessages((m) => [
         ...m,
@@ -79,6 +161,15 @@ export default function ChatScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      try {
+        Speech.stop();
+        recognitionRef.current?.stop();
+      } catch {}
+    };
+  }, []);
 
   useEffect(() => {
     setTimeout(() => {
@@ -128,8 +219,25 @@ export default function ChatScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>MediBot</Text>
-          <Text style={styles.headerSub}>AI Healthcare Assistant</Text>
+          <Text style={styles.headerSub}>
+            {listening ? "Listening…" : "AI Healthcare Assistant"}
+          </Text>
         </View>
+        <TouchableOpacity
+          style={[styles.voiceToggle, voiceMode && styles.voiceToggleActive]}
+          onPress={() => {
+            const next = !voiceMode;
+            setVoiceMode(next);
+            if (!next) Speech.stop();
+          }}
+          testID="voice-mode-toggle"
+        >
+          <Ionicons
+            name={voiceMode ? "volume-high" : "volume-mute"}
+            size={18}
+            color={voiceMode ? "#fff" : COLORS.primary}
+          />
+        </TouchableOpacity>
         <View style={styles.onlineDot} />
       </View>
 
@@ -179,9 +287,20 @@ export default function ChatScreen() {
         )}
 
         <View style={styles.inputBar}>
+          <TouchableOpacity
+            style={[styles.micBtn, listening && styles.micBtnActive]}
+            onPress={listening ? stopListening : startListening}
+            testID="chat-mic-btn"
+          >
+            <Ionicons
+              name={listening ? "stop-circle" : "mic"}
+              size={20}
+              color={listening ? "#fff" : COLORS.primary}
+            />
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
-            placeholder="Ask about your health..."
+            placeholder={listening ? "Listening…" : "Ask about your health..."}
             placeholderTextColor={COLORS.text_secondary}
             value={input}
             onChangeText={setInput}
@@ -331,5 +450,32 @@ const styles = StyleSheet.create({
   sendBtnDisabled: {
     backgroundColor: COLORS.secondary,
     opacity: 0.6,
+  },
+  voiceToggle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: SPACING.sm,
+  },
+  voiceToggleActive: {
+    backgroundColor: COLORS.primary,
+  },
+  micBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.background,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micBtnActive: {
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
   },
 });

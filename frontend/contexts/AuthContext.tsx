@@ -10,6 +10,15 @@ import React, {
 import { API_URL } from "../constants/theme";
 
 const TOKEN_KEY = "healthmate_token";
+const LAST_EMAIL_KEY = "healthmate_last_email";
+
+export const getRememberedEmail = async (): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem(LAST_EMAIL_KEY);
+  } catch {
+    return null;
+  }
+};
 
 export type User = {
   id: string;
@@ -72,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(formatError(data?.detail) || "Login failed");
     await AsyncStorage.setItem(TOKEN_KEY, data.access_token);
+    await AsyncStorage.setItem(LAST_EMAIL_KEY, email);
     setToken(data.access_token);
     setUser(data.user);
     router.replace("/");
@@ -87,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!res.ok)
       throw new Error(formatError(data?.detail) || "Registration failed");
     await AsyncStorage.setItem(TOKEN_KEY, data.access_token);
+    await AsyncStorage.setItem(LAST_EMAIL_KEY, email);
     setToken(data.access_token);
     setUser(data.user);
     router.replace("/");
@@ -103,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
+    // Keep last email so login form pre-fills next time; only clear token.
     await AsyncStorage.removeItem(TOKEN_KEY);
     setUser(null);
     setToken(null);

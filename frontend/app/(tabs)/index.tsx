@@ -18,7 +18,7 @@ import { useAuth } from "../../contexts/AuthContext";
 const HERO_IMAGE =
   "https://images.pexels.com/photos/7991909/pexels-photo-7991909.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940";
 
-type FeatureKey = "symptoms" | "fitness" | "chat";
+type FeatureKey = "symptoms" | "fitness" | "chat" | "history";
 
 const FEATURES: {
   key: FeatureKey;
@@ -27,6 +27,7 @@ const FEATURES: {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   bg: string;
+  href: string;
 }[] = [
   {
     key: "symptoms",
@@ -35,22 +36,34 @@ const FEATURES: {
     icon: "medkit",
     color: "#2A5C43",
     bg: "#E7F0EA",
+    href: "/symptoms",
   },
   {
     key: "fitness",
     title: "AI Fitness Trainer",
-    subtitle: "Track reps for push-ups, pull-ups & squats",
+    subtitle: "Pose detection rep counter (push-ups, squats…)",
     icon: "barbell",
     color: "#C25E46",
     bg: "#FBE8E2",
+    href: "/fitness",
   },
   {
     key: "chat",
     title: "MediBot Chat",
-    subtitle: "24/7 healthcare assistant powered by AI",
+    subtitle: "Voice + text AI healthcare assistant",
     icon: "chatbubbles",
     color: "#8A9E88",
     bg: "#EEF1ED",
+    href: "/chat",
+  },
+  {
+    key: "history",
+    title: "History",
+    subtitle: "Past workouts, checkups & chat sessions",
+    icon: "time",
+    color: "#5C615E",
+    bg: "#EDEFEC",
+    href: "/history",
   },
 ];
 
@@ -189,7 +202,7 @@ export default function Home() {
           <TouchableOpacity
             key={f.key}
             activeOpacity={0.85}
-            onPress={() => router.push(`/${f.key}` as never)}
+            onPress={() => router.push(f.href as never)}
             style={styles.featureCard}
             testID={`feature-card-${f.key}`}
           >
