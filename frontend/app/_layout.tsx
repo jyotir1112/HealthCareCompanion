@@ -15,9 +15,10 @@ function RootNav() {
     if (loading) return;
     const inAuthGroup = segments[0] === "(auth)";
     if (!user && !inAuthGroup) {
-      router.replace("/(auth)/login");
+      // Defer to next tick to ensure NavigationContainer is ready
+      requestAnimationFrame(() => router.replace("/login"));
     } else if (user && inAuthGroup) {
-      router.replace("/");
+      requestAnimationFrame(() => router.replace("/"));
     }
   }, [user, loading, segments, router]);
 

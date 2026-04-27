@@ -118,7 +118,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem(TOKEN_KEY);
     setUser(null);
     setToken(null);
-    router.replace("/(auth)/login");
+    // Don't call router.replace here — let RootNav's effect redirect via the
+    // user-state change. Calling replace here while still inside (tabs) can
+    // surface a transient 'REPLACE' navigator warning before the layout reacts.
   };
 
   return (
