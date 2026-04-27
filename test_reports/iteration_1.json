@@ -28,6 +28,6 @@
   "seed_data_creation": "No persistent seed needed. Test creates one TEST_Push-Up workout and one chat session (test-session-<uuid>); Mongo docs remain but are prefixed/unique and harmless.",
   "retest_needed": false,
   "should_main_agent_self_test": false,
-  "context_for_next_testing_agent": "Use EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env for both backend + frontend testing (https://fitness-care-hub.preview.emergentagent.com). Backend tests live at /app/backend/tests/test_healthmate_api.py — reuse them. Chat test takes ~3-5s (real LLM call). Fitness workout flow navigates in-screen (no route change) via setSelected state.",
+  "context_for_next_testing_agent": "Use EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env for both backend + frontend testing (https://fitness-camera-debug.preview.emergentagent.com). Backend tests live at /app/backend/tests/test_healthmate_api.py — reuse them. Chat test takes ~3-5s (real LLM call). Fitness workout flow navigates in-screen (no route change) via setSelected state.",
   "rca_of_issue": "N/A - no bugs found."
 }

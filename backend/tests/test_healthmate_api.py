@@ -7,7 +7,7 @@ import requests
 BASE_URL = (
     os.environ.get("EXPO_BACKEND_URL")
     or os.environ.get("EXPO_PUBLIC_BACKEND_URL")
-    or "https://fitness-care-hub.preview.emergentagent.com"
+    or "https://fitness-camera-debug.preview.emergentagent.com"
 ).rstrip("/")
 API = f"{BASE_URL}/api"
 
