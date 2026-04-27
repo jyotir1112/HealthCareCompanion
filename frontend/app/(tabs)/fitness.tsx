@@ -123,6 +123,8 @@ export default function FitnessScreen() {
   const [camPermission, requestCamPermission] = useCameraPermissions();
   const [accelAvailable, setAccelAvailable] = useState(true);
   const [motionLevel, setMotionLevel] = useState(0);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<string>("Loading AI Pose model…");
   const webViewRef = useRef<WebView>(null);
 
   const handleWebMessage = useCallback((event: any) => {
@@ -132,6 +134,11 @@ export default function FitnessScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         setReps(data.count);
         setRunning(true);
+      } else if (data.type === "ready") {
+        setAiError(null);
+        setAiStatus("Tracking — get into position");
+      } else if (data.type === "error") {
+        setAiError(String(data.message || "Unknown error"));
       }
     } catch {}
   }, []);
@@ -150,7 +157,7 @@ export default function FitnessScreen() {
     };
     load();
     Accelerometer.isAvailableAsync()
-      .then(setAccelAvailable)
+      .then((avail) => setAccelAvailable(!!avail))
       .catch(() => setAccelAvailable(false));
   }, []);
 
@@ -354,7 +361,25 @@ export default function FitnessScreen() {
               domStorageEnabled
               allowsInlineMediaPlayback
               mediaPlaybackRequiresUserAction={false}
+              mediaCapturePermissionGrantType="grant"
+              allowsProtectedMedia
+              cacheEnabled={false}
+              androidLayerType="hardware"
+              mixedContentMode="always"
+              setSupportMultipleWindows={false}
               onMessage={handleWebMessage}
+              onError={(e) => {
+                setAiError(
+                  `WebView error: ${e?.nativeEvent?.description || "unknown"}`
+                );
+              }}
+              onHttpError={(e) => {
+                setAiError(
+                  `HTTP ${e?.nativeEvent?.statusCode || ""} ${
+                    e?.nativeEvent?.description || ""
+                  }`
+                );
+              }}
               injectedJavaScript={`window.location.hash = 'exercise=${selected.id}'; if(window.healthmate)window.healthmate.setExercise('${selected.id}'); true;`}
             />
             <View style={styles.cameraOverlay}>
@@ -367,12 +392,24 @@ export default function FitnessScreen() {
                 onPress={() => {
                   setAiVisionMode(false);
                   setCameraOn(false);
+                  setAiError(null);
                 }}
                 testID="ai-close-btn"
               >
                 <Ionicons name="close" size={22} color="#fff" />
               </TouchableOpacity>
             </View>
+            {aiError && (
+              <View style={styles.aiErrorBox} pointerEvents="none">
+                <Text style={styles.aiErrorTitle}>AI Pose unavailable</Text>
+                <Text style={styles.aiErrorText} numberOfLines={4}>
+                  {aiError}
+                </Text>
+                <Text style={styles.aiErrorHint}>
+                  Use Camera Only mode below — manual or motion auto-count.
+                </Text>
+              </View>
+            )}
           </View>
         ) : cameraOn && camPermission?.granted ? (
           <View style={styles.cameraBox} testID="camera-preview">
@@ -783,6 +820,36 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  aiErrorBox: {
+    position: "absolute",
+    left: SPACING.md,
+    right: SPACING.md,
+    bottom: SPACING.md,
+    backgroundColor: "rgba(0,0,0,0.78)",
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+  },
+  aiErrorTitle: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: FONT.extrabold,
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  aiErrorText: {
+    color: "#FBE8E2",
+    fontSize: 12,
+    fontWeight: FONT.semibold,
+    lineHeight: 17,
+  },
+  aiErrorHint: {
+    color: "#CFE2D5",
+    fontSize: 11,
+    marginTop: 6,
+    fontWeight: FONT.semibold,
   },
 
   counterCard: {

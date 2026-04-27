@@ -197,6 +197,18 @@ export const POSE_TRACKER_HTML = `<!DOCTYPE html>
     send('error', {message: msg});
   }
 
+  // Catch any unhandled errors (e.g. MediaPipe WASM load failures in some WebView envs)
+  window.addEventListener('error', function(ev){
+    var m = (ev && ev.message) ? ev.message : 'Unknown JS error';
+    if (ev && ev.filename) m += ' @ ' + ev.filename;
+    showError('Script error: ' + m);
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    var r = ev && ev.reason;
+    var m = (r && (r.message || r)) ? (r.message || String(r)) : 'Unknown promise rejection';
+    showError('Promise error: ' + m);
+  });
+
   async function start(){
     try {
       if (typeof Pose === 'undefined') {

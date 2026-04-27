@@ -101,3 +101,25 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "in this HealthCareCompanion repository the healthmate app, the camera and ai vision camera are not working in the ai fitness app and error is showing when we start the app"
+
+frontend:
+  - task: "AI Pose Vision (WebView + MediaPipe) camera access in Expo Go (iOS/Android)"
+    implemented: true
+    working: "NA"
+    file: "frontend/app/(tabs)/fitness.tsx, frontend/constants/poseTrackerHtml.ts"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: false
+        -agent: "user"
+        -comment: "User reports: Red error screen with stack trace on app start; AI Pose Vision camera box stays black on Expo Go (Android + iOS). Camera Only mode works."
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added mediaCapturePermissionGrantType=grant (iOS auto-grant), allowsProtectedMedia, mixedContentMode=always, androidLayerType=hardware, setSupportMultipleWindows=false, onError/onHttpError handlers. Added in-WebView window error/unhandledrejection listeners that postMessage {type:error}. Added visible aiError overlay so a black box now surfaces the underlying failure (e.g. WebRTC/getUserMedia/WASM-load failures). Awaiting user retest + stack trace text from the original red-screen error to address that separately."
+
+agent_communication:
+    -agent: "main"
+    -message: "Applied fixes for the WebView camera-access path (this is the root cause of the AI Pose Vision black-box on Expo Go iOS — without mediaCapturePermissionGrantType the WKWebView denies getUserMedia even when the host app has camera permission). Android relies on the host app's CAMERA permission being granted before the WebView mounts; the existing flow already requests it via expo-camera. Need user to retest and share the actual red-screen stack trace text — that is a separate issue and can't be diagnosed without the message."
