@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   Image,
@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
+import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
 
 const HERO_IMAGE =
@@ -56,12 +56,55 @@ const FEATURES: {
 
 export default function Home() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
+  const [caloriesToday, setCaloriesToday] = useState<number>(0);
+  const [workoutCount, setWorkoutCount] = useState<number>(0);
+  const [lastCheckup, setLastCheckup] = useState<string | null>(null);
+
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "short",
     day: "numeric",
   });
+
+  const loadStats = useCallback(async () => {
+    if (!token) return;
+    try {
+      const [calRes, lastRes] = await Promise.all([
+        fetch(`${API_URL}/workouts/me/today`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_URL}/symptom-checks/me/last`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+      if (calRes.ok) {
+        const d = await calRes.json();
+        setCaloriesToday(d.total_calories || 0);
+        setWorkoutCount(d.workout_count || 0);
+      }
+      if (lastRes.ok) {
+        const d = await lastRes.json();
+        const ts = d?.last_check?.timestamp;
+        if (ts) {
+          const dt = new Date(ts);
+          setLastCheckup(
+            dt.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+          );
+        } else {
+          setLastCheckup(null);
+        }
+      }
+    } catch {
+      // silent
+    }
+  }, [token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadStats();
+    }, [loadStats])
+  );
 
   const confirmLogout = () => {
     if (Platform.OS === "web") {
@@ -83,8 +126,11 @@ export default function Home() {
         showsVerticalScrollIndicator={false}
         testID="home-scroll"
       >
-        {/* Header */}
+        {/* Header with custom logo */}
         <View style={styles.headerRow}>
+          <View style={styles.logoBubble} testID="app-logo">
+            <Ionicons name="heart-circle" size={28} color="#fff" />
+          </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.smallLabel}>{today}</Text>
             <Text style={styles.greeting} testID="home-greeting">
@@ -116,14 +162,22 @@ export default function Home() {
 
         {/* Stats */}
         <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: "#EEF1ED" }]}>
+          <View
+            style={[styles.statCard, { backgroundColor: "#EEF1ED" }]}
+            testID="calories-stat"
+          >
             <Ionicons name="flame" size={22} color={COLORS.accent} />
-            <Text style={styles.statValue}>0</Text>
-            <Text style={styles.statLabel}>Calories Today</Text>
+            <Text style={styles.statValue}>{caloriesToday}</Text>
+            <Text style={styles.statLabel}>
+              Calories Today{workoutCount ? ` · ${workoutCount}` : ""}
+            </Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: "#E7F0EA" }]}>
+          <View
+            style={[styles.statCard, { backgroundColor: "#E7F0EA" }]}
+            testID="checkup-stat"
+          >
             <Ionicons name="heart" size={22} color={COLORS.primary} />
-            <Text style={styles.statValue}>—</Text>
+            <Text style={styles.statValue}>{lastCheckup ?? "—"}</Text>
             <Text style={styles.statLabel}>Last Check-up</Text>
           </View>
         </View>
@@ -182,6 +236,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: SPACING.sm,
+  },
+  logoBubble: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   smallLabel: {
     fontSize: 11,

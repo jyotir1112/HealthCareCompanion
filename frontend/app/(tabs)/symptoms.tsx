@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
+import { useAuth } from "../../contexts/AuthContext";
 
 type Disease = {
   name: string;
@@ -29,6 +30,7 @@ const severityColor = (s: string) => {
 };
 
 export default function SymptomsScreen() {
+  const { token } = useAuth();
   const [allSymptoms, setAllSymptoms] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
@@ -65,7 +67,10 @@ export default function SymptomsScreen() {
     try {
       const res = await fetch(`${API_URL}/symptoms/check`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ symptoms: Array.from(selected) }),
       });
       const data = await res.json();

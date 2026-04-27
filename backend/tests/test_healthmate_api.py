@@ -4,7 +4,11 @@ import uuid
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://fitness-care-hub.preview.emergentagent.com").rstrip("/")
+BASE_URL = (
+    os.environ.get("EXPO_BACKEND_URL")
+    or os.environ.get("EXPO_PUBLIC_BACKEND_URL")
+    or "https://fitness-care-hub.preview.emergentagent.com"
+).rstrip("/")
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@healthmate.app"
@@ -188,6 +192,80 @@ class TestWorkouts:
         assert r.status_code == 200
         data = r.json()
         assert data["user_id"] is not None
+
+    def test_log_workout_calories_pushup(self, client):
+        # 20 push-ups @ 5 cal/10reps -> 10.0
+        payload = {"exercise": "Push-Up", "reps": 20, "duration_seconds": 60}
+        r = client.post(f"{API}/workouts", json=payload, timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["calories_burned"] == 10.0, f"Expected 10.0 calories, got {data.get('calories_burned')}"
+
+    def test_log_workout_calories_by_id(self, client):
+        # exercise field can also be id "burpees" (12 cal/10reps) -> 30 reps = 36.0
+        payload = {"exercise": "burpees", "reps": 30, "duration_seconds": 90}
+        r = client.post(f"{API}/workouts", json=payload, timeout=30)
+        assert r.status_code == 200
+        assert r.json()["calories_burned"] == 36.0
+
+
+# ===== Workouts /me/today endpoint =====
+class TestWorkoutsMeToday:
+    def test_requires_auth(self, client):
+        r = requests.get(f"{API}/workouts/me/today", timeout=30)
+        assert r.status_code == 401
+
+    def test_returns_today_aggregates(self, client):
+        # Register a fresh user, log 2 workouts, check totals
+        email = f"today_{uuid.uuid4().hex[:8]}@test.com"
+        reg = client.post(f"{API}/auth/register", json={"email": email, "password": "Test@1234", "name": "TEST_Today"}, timeout=30)
+        token = reg.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        # 20 push-ups = 10 cal
+        client.post(f"{API}/workouts", json={"exercise": "Push-Up", "reps": 20, "duration_seconds": 60}, headers=headers, timeout=30)
+        # 10 squats = 6 cal
+        client.post(f"{API}/workouts", json={"exercise": "Squat", "reps": 10, "duration_seconds": 30}, headers=headers, timeout=30)
+        r = client.get(f"{API}/workouts/me/today", headers=headers, timeout=30)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["workout_count"] == 2
+        assert data["total_reps"] == 30
+        assert data["total_calories"] == 16.0, f"Expected 16.0 cal, got {data['total_calories']}"
+        assert len(data["workouts"]) == 2
+
+
+# ===== Symptom-checks /me/last endpoint =====
+class TestSymptomChecksLast:
+    def test_requires_auth(self, client):
+        r = requests.get(f"{API}/symptom-checks/me/last", timeout=30)
+        assert r.status_code == 401
+
+    def test_persists_and_returns_last(self, client):
+        email = f"sym_{uuid.uuid4().hex[:8]}@test.com"
+        reg = client.post(f"{API}/auth/register", json={"email": email, "password": "Test@1234", "name": "TEST_Sym"}, timeout=30)
+        token = reg.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        # First call -> last_check should be null (or absent)
+        r = client.get(f"{API}/symptom-checks/me/last", headers=headers, timeout=30)
+        assert r.status_code == 200
+        first = r.json()
+        assert first.get("last_check") in (None, {}, []) or first["last_check"] is None
+        # Submit a symptom check
+        sc = client.post(f"{API}/symptoms/check", json={"symptoms": ["headache", "nausea"]}, headers=headers, timeout=30)
+        assert sc.status_code == 200
+        # Now last_check should exist with a timestamp
+        r2 = client.get(f"{API}/symptom-checks/me/last", headers=headers, timeout=30)
+        assert r2.status_code == 200
+        last = r2.json().get("last_check")
+        assert last is not None
+        assert "timestamp" in last
+        assert last.get("user_id")  # should match user
+
+    def test_anonymous_symptoms_check_does_not_persist(self, client):
+        # No Bearer token -> should still return 200 but not persist anywhere we can verify directly,
+        # so just confirm the endpoint works without auth.
+        r = client.post(f"{API}/symptoms/check", json={"symptoms": ["headache"]}, timeout=30)
+        assert r.status_code == 200
 
 
 # ===== Chat (Emergent LLM) =====

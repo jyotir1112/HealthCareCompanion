@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { Accelerometer } from "expo-sensors";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -14,7 +14,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 import { API_URL, COLORS, FONT, RADIUS, SPACING } from "../../constants/theme";
+import { POSE_TRACKER_HTML } from "../../constants/poseTrackerHtml";
 import { useAuth } from "../../contexts/AuthContext";
 
 type Exercise = {
@@ -36,60 +38,71 @@ function formatTime(s: number) {
   return `${m}:${sec}`;
 }
 
-// Motion-peak based rep detection. Tracks acceleration magnitude and detects
-// a down-up cycle above a threshold as one rep. Works well for squats, push-ups,
-// jumping jacks — imperfect but approximates real pose-detection rep counting.
+// Motion-peak based rep detection using magnitude + gravity removal.
+// A low-pass filter tracks the gravity baseline so we only see MOTION.
+// A rep = one "peak then settle" cycle. Works regardless of phone orientation.
 function useAccelRepCounter(options: {
   enabled: boolean;
-  axis: Exercise["motion_axis"];
   threshold: number;
   onRep: () => void;
+  onSignal?: (intensity: number) => void;
 }) {
-  const { enabled, axis, threshold, onRep } = options;
-  const stateRef = useRef<"idle" | "down" | "up">("idle");
+  const { enabled, threshold, onRep, onSignal } = options;
+  const inPeakRef = useRef<boolean>(false);
   const lastRepAtRef = useRef<number>(0);
-  const magRef = useRef<number>(1);
+  // Low-pass gravity baseline
+  const gRef = useRef<{ x: number; y: number; z: number }>({ x: 0, y: 0, z: 0 });
+  const initRef = useRef<boolean>(false);
+  // Peak tracking for adaptive behaviour
+  const peakMagRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!enabled) return;
-    Accelerometer.setUpdateInterval(100);
+    if (!enabled) {
+      inPeakRef.current = false;
+      initRef.current = false;
+      return;
+    }
+    Accelerometer.setUpdateInterval(60);
+    const alpha = 0.85; // gravity smoothing factor
     const sub = Accelerometer.addListener(({ x, y, z }) => {
-      // Magnitude depending on axis of interest
-      let val: number;
-      if (axis === "y") val = y;
-      else if (axis === "x") val = x;
-      else val = Math.sqrt(x * x + y * y + z * z) - 1; // subtract gravity baseline for xyz
-      magRef.current = val;
-      const now = Date.now();
-      if (now - lastRepAtRef.current < 400) return; // debounce
+      if (!initRef.current) {
+        gRef.current = { x, y, z };
+        initRef.current = true;
+        return;
+      }
+      // Update gravity baseline (low-pass)
+      gRef.current.x = alpha * gRef.current.x + (1 - alpha) * x;
+      gRef.current.y = alpha * gRef.current.y + (1 - alpha) * y;
+      gRef.current.z = alpha * gRef.current.z + (1 - alpha) * z;
+      // Motion = raw - gravity
+      const mx = x - gRef.current.x;
+      const my = y - gRef.current.y;
+      const mz = z - gRef.current.z;
+      const mag = Math.sqrt(mx * mx + my * my + mz * mz);
 
-      // For axis-based (y/x), use sign transitions with threshold
-      if (axis === "y" || axis === "x") {
-        if (stateRef.current !== "down" && val < -threshold) {
-          stateRef.current = "down";
-        } else if (stateRef.current === "down" && val > threshold) {
-          stateRef.current = "up";
+      if (onSignal) onSignal(mag);
+
+      const now = Date.now();
+      if (now - lastRepAtRef.current < 450) return; // debounce
+
+      // Peak-valley detection with hysteresis
+      if (!inPeakRef.current && mag > threshold) {
+        inPeakRef.current = true;
+        peakMagRef.current = mag;
+      } else if (inPeakRef.current) {
+        // still inside peak — track the max
+        if (mag > peakMagRef.current) peakMagRef.current = mag;
+        // fell back below half threshold → rep done
+        if (mag < threshold * 0.4) {
+          inPeakRef.current = false;
           lastRepAtRef.current = now;
+          peakMagRef.current = 0;
           onRep();
-        } else if (Math.abs(val) < 0.1 && stateRef.current === "up") {
-          stateRef.current = "idle";
-        }
-      } else {
-        // xyz magnitude above threshold once per cycle
-        if (stateRef.current !== "down" && Math.abs(val) > threshold) {
-          stateRef.current = "down";
-        } else if (stateRef.current === "down" && Math.abs(val) < 0.1) {
-          stateRef.current = "up";
-          lastRepAtRef.current = now;
-          onRep();
-          stateRef.current = "idle";
         }
       }
     });
     return () => sub.remove();
-  }, [enabled, axis, threshold, onRep]);
-
-  return magRef;
+  }, [enabled, threshold, onRep, onSignal]);
 }
 
 export default function FitnessScreen() {
@@ -106,8 +119,24 @@ export default function FitnessScreen() {
   // Camera + auto-detect states
   const [cameraOn, setCameraOn] = useState(false);
   const [autoDetect, setAutoDetect] = useState(false);
+  const [aiVisionMode, setAiVisionMode] = useState(false);
   const [camPermission, requestCamPermission] = useCameraPermissions();
   const [accelAvailable, setAccelAvailable] = useState(true);
+  const [motionLevel, setMotionLevel] = useState(0);
+  const webViewRef = useRef<WebView>(null);
+
+  const handleWebMessage = useCallback((event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "rep") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        setReps(data.count);
+        setRunning(true);
+      }
+    } catch {}
+  }, []);
+
+  const poseHtml = useMemo(() => POSE_TRACKER_HTML, []);
 
   useEffect(() => {
     const load = async () => {
@@ -145,9 +174,9 @@ export default function FitnessScreen() {
 
   useAccelRepCounter({
     enabled: autoDetect && !!selected && selected.tracking_mode === "reps",
-    axis: (selected?.motion_axis as any) || "y",
-    threshold: 0.35,
+    threshold: 0.25,
     onRep: onAutoRep,
+    onSignal: setMotionLevel,
   });
 
   const incrementRep = () => {
@@ -310,8 +339,42 @@ export default function FitnessScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Camera preview */}
-        {cameraOn && camPermission?.granted ? (
+        {/* Camera / AI Vision preview */}
+        {aiVisionMode ? (
+          <View style={styles.cameraBox} testID="ai-pose-webview">
+            <WebView
+              ref={webViewRef}
+              originWhitelist={["*"]}
+              source={{
+                html: poseHtml,
+                baseUrl: "https://healthmate.app/",
+              }}
+              style={StyleSheet.absoluteFill}
+              javaScriptEnabled
+              domStorageEnabled
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+              onMessage={handleWebMessage}
+              injectedJavaScript={`window.location.hash = 'exercise=${selected.id}'; if(window.healthmate)window.healthmate.setExercise('${selected.id}'); true;`}
+            />
+            <View style={styles.cameraOverlay}>
+              <View style={styles.overlayTopRow}>
+                <View style={styles.recDot} />
+                <Text style={styles.cameraOverlayText}>AI POSE</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.cameraClose}
+                onPress={() => {
+                  setAiVisionMode(false);
+                  setCameraOn(false);
+                }}
+                testID="ai-close-btn"
+              >
+                <Ionicons name="close" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : cameraOn && camPermission?.granted ? (
           <View style={styles.cameraBox} testID="camera-preview">
             <CameraView style={StyleSheet.absoluteFill} facing="front" />
             <View style={styles.cameraOverlay}>
@@ -334,20 +397,36 @@ export default function FitnessScreen() {
             </View>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.cameraPlaceholder}
-            onPress={enableCamera}
-            testID="enable-camera-btn"
-          >
-            <Ionicons name="videocam" size={32} color={COLORS.primary} />
-            <Text style={styles.cameraPlaceholderTitle}>
-              Enable Camera Coach
-            </Text>
-            <Text style={styles.cameraPlaceholderSub}>
-              See yourself while working out. Turn on Auto-Detect below to count
-              reps hands-free via motion sensors.
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.coachRow}>
+            <TouchableOpacity
+              style={styles.coachBtn}
+              onPress={async () => {
+                if (!camPermission?.granted) {
+                  const r = await requestCamPermission();
+                  if (!r.granted) return;
+                }
+                setAiVisionMode(true);
+                setCameraOn(false);
+                setAutoDetect(false);
+                setReps(0);
+                setRunning(true);
+              }}
+              testID="enable-ai-vision-btn"
+            >
+              <Ionicons name="scan" size={24} color="#fff" />
+              <Text style={styles.coachBtnText}>AI Pose Vision</Text>
+              <Text style={styles.coachBtnSub}>Counts reps via camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.coachBtnAlt}
+              onPress={enableCamera}
+              testID="enable-camera-btn"
+            >
+              <Ionicons name="videocam" size={24} color={COLORS.primary} />
+              <Text style={styles.coachBtnAltText}>Camera Only</Text>
+              <Text style={styles.coachBtnAltSub}>Manual + motion</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Counter */}
@@ -381,11 +460,27 @@ export default function FitnessScreen() {
               <Text style={styles.autoTitle}>Auto-Detect Reps</Text>
               <Text style={styles.autoSub}>
                 {accelAvailable
-                  ? Platform.OS === "web"
-                    ? "Uses device motion. Best on a phone — tap phone to body or hold it."
-                    : "Hold or wear your phone. Detects motion cycles."
+                  ? "Hold your phone firmly (in your hand, strapped to arm, or in a tight pocket). Do full-range reps — the motion bar below should spike on each rep."
                   : "Motion sensor unavailable on this device."}
               </Text>
+              {autoDetect && (
+                <View style={styles.motionBarWrap} testID="motion-bar">
+                  <View
+                    style={[
+                      styles.motionBarFill,
+                      {
+                        width: `${Math.min(100, Math.round((motionLevel / 1.0) * 100))}%`,
+                        backgroundColor:
+                          motionLevel > 0.25 ? COLORS.accent : COLORS.primary,
+                      },
+                    ]}
+                  />
+                  <Text style={styles.motionBarText}>
+                    Motion: {motionLevel.toFixed(2)}g{" "}
+                    {motionLevel > 0.25 ? "• peak!" : ""}
+                  </Text>
+                </View>
+              )}
             </View>
             <Switch
               value={autoDetect}
@@ -584,6 +679,50 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     backgroundColor: "#EEF1ED",
   },
+  coachRow: {
+    flexDirection: "row",
+    gap: SPACING.md,
+  },
+  coachBtn: {
+    flex: 1,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: "center",
+    gap: 4,
+  },
+  coachBtnText: {
+    color: "#fff",
+    fontWeight: FONT.extrabold,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  coachBtnSub: {
+    color: "#CFE2D5",
+    fontSize: 11,
+    fontWeight: FONT.semibold,
+  },
+  coachBtnAlt: {
+    flex: 1,
+    backgroundColor: "#EEF1ED",
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  coachBtnAltText: {
+    color: COLORS.primary,
+    fontWeight: FONT.extrabold,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  coachBtnAltSub: {
+    color: COLORS.text_secondary,
+    fontSize: 11,
+    fontWeight: FONT.semibold,
+  },
   cameraPlaceholderTitle: {
     fontSize: 16,
     fontWeight: FONT.extrabold,
@@ -692,6 +831,28 @@ const styles = StyleSheet.create({
     color: COLORS.text_secondary,
     marginTop: 2,
     lineHeight: 16,
+  },
+  motionBarWrap: {
+    marginTop: SPACING.sm,
+    height: 22,
+    borderRadius: RADIUS.full,
+    backgroundColor: "#EEF1ED",
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  motionBarFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+  },
+  motionBarText: {
+    paddingHorizontal: 10,
+    fontSize: 11,
+    color: COLORS.text_primary,
+    fontWeight: FONT.bold,
   },
 
   bigTapBtn: {

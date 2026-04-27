@@ -173,6 +173,7 @@ class WorkoutLog(BaseModel):
     exercise: str
     reps: int
     duration_seconds: int
+    calories_burned: float = 0.0
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -329,7 +330,7 @@ async def get_symptoms():
 
 
 @api_router.post("/symptoms/check", response_model=SymptomCheckResponse)
-async def check_symptoms(request: SymptomCheckRequest):
+async def check_symptoms(request: SymptomCheckRequest, http_request: Request):
     if not request.symptoms:
         raise HTTPException(status_code=400, detail="Please select at least one symptom.")
     user_symptoms = {s.lower().strip() for s in request.symptoms}
@@ -351,10 +352,41 @@ async def check_symptoms(request: SymptomCheckRequest):
             severity=disease["severity"],
         ))
     scored.sort(key=lambda d: d.match_score, reverse=True)
+    top = scored[:5]
+
+    # Persist for authenticated user
+    user_id = None
+    auth_header = http_request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            payload = jwt.decode(auth_header[7:].strip(), JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = payload.get("sub")
+        except Exception:
+            user_id = None
+    if user_id:
+        await db.symptom_checks.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "symptoms": list(user_symptoms),
+            "top_results": [d.dict() for d in top],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
     return SymptomCheckResponse(
-        results=scored[:5],
+        results=top,
         disclaimer="This is an AI-assisted preliminary assessment, not a medical diagnosis. Please consult a qualified healthcare professional for proper diagnosis and treatment.",
     )
+
+
+@api_router.get("/symptom-checks/me/last")
+async def last_symptom_check(user: dict = Depends(get_current_user)):
+    """Return the timestamp of the user's most recent symptom check (or null)."""
+    doc = await db.symptom_checks.find_one(
+        {"user_id": user["id"]},
+        {"_id": 0},
+        sort=[("timestamp", -1)],
+    )
+    return {"last_check": doc}
 
 
 # -------- EXERCISES / WORKOUTS --------
@@ -382,7 +414,18 @@ async def log_workout(input: WorkoutLogCreate, request: Request):
             user_id = payload.get("sub")
         except Exception:
             user_id = None
-    wl = WorkoutLog(user_id=user_id, **input.dict())
+    # compute calories from exercise definition
+    cal_per_10 = 5
+    for ex in EXERCISES:
+        if ex["name"] == input.exercise or ex["id"] == input.exercise:
+            cal_per_10 = ex["calories_per_10_reps"]
+            break
+    if input.reps > 0:
+        calories = round(input.reps / 10 * cal_per_10, 1)
+    else:
+        # time-based: ~3 cal per minute
+        calories = round(input.duration_seconds / 60 * 3, 1)
+    wl = WorkoutLog(user_id=user_id, calories_burned=calories, **input.dict())
     doc = wl.dict()
     doc["timestamp"] = doc["timestamp"].isoformat()
     await db.workouts.insert_one(doc)
@@ -401,6 +444,26 @@ async def list_workouts(limit: int = 20):
                 d["timestamp"] = datetime.now(timezone.utc)
         results.append(WorkoutLog(**d))
     return results
+
+
+@api_router.get("/workouts/me/today")
+async def my_workouts_today(user: dict = Depends(get_current_user)):
+    """Return today's workouts and total calories for the authenticated user."""
+    now = datetime.now(timezone.utc)
+    start_iso = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    docs = await db.workouts.find(
+        {"user_id": user["id"], "timestamp": {"$gte": start_iso}},
+        {"_id": 0},
+    ).sort("timestamp", -1).to_list(200)
+    total_calories = round(sum(d.get("calories_burned", 0) or 0 for d in docs), 1)
+    total_reps = sum(d.get("reps", 0) or 0 for d in docs)
+    return {
+        "date": start_iso[:10],
+        "workout_count": len(docs),
+        "total_calories": total_calories,
+        "total_reps": total_reps,
+        "workouts": docs,
+    }
 
 
 # -------- CHAT --------
