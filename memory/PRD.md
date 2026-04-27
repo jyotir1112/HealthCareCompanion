@@ -1,57 +1,52 @@
 # HealthMate — PRD
 
 ## Overview
-React Expo mobile app combining 3 health features inspired by user's GitHub repos:
-1. **Symptom Checker** (Health-Checkup repo)
-2. **AI Fitness Trainer** (AI-Fitness-Trainer + FormFit-AI inspired) — REAL MediaPipe Pose-based rep counting
-3. **Healthcare Chatbot** (MediBot) powered by Claude Sonnet 4.5
+React Expo mobile app combining 3 health features:
+1. **Symptom Checker** — 29 conditions, 67 symptoms, AI-style match scoring
+2. **AI Fitness Trainer** — MediaPipe Pose camera-based rep counting (11 exercises)
+3. **MediBot Chatbot** — Claude Sonnet 4.5 with **voice input + voice output**
 
-## Tech Stack
-- **Frontend**: Expo SDK 54 + React Native + expo-router (Stack + (auth)/(tabs) groups)
-- **Pose Detection**: MediaPipe Pose (JS) running inside `react-native-webview` — angle-based rep counting mirrors the user's reference Python algorithm
-- **Backend**: FastAPI + MongoDB + emergentintegrations
-- **Auth**: JWT (PyJWT + bcrypt), Bearer token in AsyncStorage, brute-force lockout (X-Forwarded-For aware)
-- **LLM**: Claude Sonnet 4.5 via Emergent Universal LLM Key
-- **Sensors**: expo-camera + expo-sensors Accelerometer (motion fallback)
+Plus: **History dashboard**, **JWT auth with remembered email**, **personalized stats** on Home.
 
-## Iteration 3 Highlights
-- **Real AI Pose Detection** — Tap "AI Pose Vision" → opens a WebView running MediaPipe Pose from CDN. Computes joint angles (arm/leg/abdomen) with `angle3()` exactly like the user's body_part_angle.py reference and triggers rep cycles via state machine per exercise (push-up & pull-up via arm angle 90°→160°, squat & lunges via leg angle 110°→160°, sit-up via abdomen 80°→140°, bicep curls 50°→160° inverse, shoulder press 95°→165°, jumping jacks via wrist-shoulder Y delta, burpees & deadlift via abdomen). Posts `{type:'rep',count,exercise}` to React Native via `postMessage`.
-- **Persistent stats** — Workouts now store `calories_burned`. New endpoints `/api/workouts/me/today` and `/api/symptom-checks/me/last` aggregate per-user data.
-- **Home stats** wired up — Calories Today + Last Check-up refresh on tab focus via `useFocusEffect`.
-- **Custom logo** — heart-circle bubble in front of "Hello, {firstName}".
-- **Web fallback** — On web preview AI Pose Vision shows "Open on phone" (WebView native module not available on RN-web).
+## Stack
+- **Frontend**: Expo SDK 54 + RN + expo-router (Stack with `(auth)`, `(tabs)`, `history` routes)
+- **Voice**: expo-speech (TTS, native+web) + Web Speech API (STT, web only)
+- **Pose**: MediaPipe Pose (JS) in react-native-webview, angle-based rep counter
+- **Backend**: FastAPI + MongoDB + emergentintegrations + bcrypt + PyJWT
+- **LLM**: Claude Sonnet 4.5 via Emergent Universal Key
 
-## Auth
-- `/(auth)/login`, `/(auth)/register`
+## Iteration 4 Highlights
+- **🎤 Voice MediBot** — Mic button (Web Speech API) records speech → fills input → auto-sends. Speaker toggle (`expo-speech`) reads bot replies aloud while bot text bubble still renders normally.
+- **🕒 History dashboard** — Home gains a 4th card. Dedicated `/history` screen with 3 tabs (Workouts / Checkups / Chats) — all per-user.
+- **📧 Remembered email** — On login/register, email saved to AsyncStorage. After logout, login form pre-fills email (with "remembered" badge); password is never cached for security.
+- **🩺 +17 conditions, +39 symptoms** — Symptom DB now covers: Common Cold, Flu, Migraine, Tension Headache, Gastroenteritis, Acid Reflux, Allergies, Asthma, Bronchitis, Hypertension, Diabetes, Hypothyroidism, Hyperthyroidism, Anxiety, Depression, Pneumonia, **COVID-19**, UTI, Kidney Stones, Anemia, Sinusitis, Conjunctivitis, Eczema, Iron Deficiency, Heart Disease, **Stroke (emergency)**, Arthritis, Insomnia, Dehydration.
+- **Chat persists per user** — Chat sessions tied to `user_id` so they appear in History.
+
+## Auth (unchanged behavior + remembered email)
+- JWT 7-day Bearer token + bcrypt + brute-force lockout (5 attempts → 15min)
 - Admin seed: `admin@healthmate.app` / `Admin@1234`
-- Brute-force: 5 attempts/IP+email → 15-minute lockout
-- 7-day JWT, AsyncStorage, no cookies
+- Logout removes token, keeps last email
 
-## API (`/api` prefix)
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/auth/register|login|me|logout` | POST/GET | varies | JWT auth |
-| `/symptoms` | GET | — | List symptoms |
-| `/symptoms/check` | POST | Optional | Predict diseases (persists per-user when authed) |
-| `/symptom-checks/me/last` | GET | Bearer | User's most recent check |
-| `/exercises` | GET | — | 11 exercises with form tips |
-| `/workouts` | POST | Optional | Log workout (auto-calories) |
-| `/workouts/me/today` | GET | Bearer | Today's totals + workouts |
-| `/chat/send|history` | POST/GET | — | Claude Sonnet 4.5 chat |
-
-## Exercises (11)
-Push-Up, Pull-Up, Squat, Sit-Up, Plank (timed), Lunges, Jumping Jacks, Bicep Curls, Shoulder Press, Burpees, Deadlift.
-
-## MongoDB Collections
-`users` (unique email index), `login_attempts`, `workouts` (with user_id + calories_burned), `chat_messages`, `symptom_checks`, `status_checks`. All responses exclude `_id` and `password_hash`.
-
-## Permissions (app.json)
-- iOS: NSCameraUsageDescription, NSMotionUsageDescription
-- Android: CAMERA, RECORD_AUDIO, HIGH_SAMPLING_RATE_SENSORS, BODY_SENSORS
+## API
+| Endpoint | Auth | Description |
+|---|---|---|
+| `/auth/{register,login,me,logout}` | varies | JWT auth |
+| `/symptoms` | — | 67 symptoms |
+| `/symptoms/check` | optional | Predict conditions; persists for auth user |
+| `/symptom-checks/me{,/last}` | Bearer | History + last check |
+| `/exercises` | — | 11 exercises |
+| `/workouts` | optional | Log workout (auto-calories) |
+| `/workouts/me{,/today}` | Bearer | All / today's workouts |
+| `/chat/send` | optional | Claude reply, persists user_id when authed |
+| `/chat/history/{session_id}` | — | Single session messages |
+| `/chat/sessions/me` | Bearer | All user sessions with last preview |
 
 ## Testing
-- **Backend**: 26/26 pytest cases pass (auth, brute-force, exercises, workouts + per-user totals, symptoms + per-user persistence, chat)
-- **Frontend**: Logo renders before greeting ✓ ; Calories Today refreshes after a workout ✓ ; Last Check-up shows date after symptom checker ✓ ; AI Pose Vision WebView mounts on native ✓.
+- **Backend**: 37/37 pytest cases pass
+- **Frontend**: All Iter-4 flows verified — 4 home cards, history 3 tabs, voice mic + speaker toggle, remembered-email pre-fill
+
+## Permissions (app.json)
+- Camera, Motion, Microphone — declared per platform
 
 ## Business Enhancement
-**Real-time form coach**: Already capturing pose angles. Next step: send live `{exercise, angle}` over WebSocket to MediaBot which can give voice cues like "knees behind toes" — turning the app into a full personal trainer.
+**Voice + History** unlocks accessibility (visually-impaired users, hands-free workouts) AND retention (users see their progress timeline). Next layer: predictive nudges — "You haven't done a check-up in 14 days" or "Try a quick chat about your sleep".
